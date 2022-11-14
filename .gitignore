@@ -1,0 +1,7 @@
+.idea
+venv
+industrial_part_recognition
+results*
+__pycache__
+new2/
+res_old/
