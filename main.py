@@ -19,7 +19,7 @@ def get_args_parser():
     # training
     parser.add_argument('--name', default='ResNet_34_nr3_1_6_9-res512-ms', type=str)
     parser.add_argument('--outdir', default='./results', type=str)
-    parser.add_argument('--epochs', default=50, type=int)
+    parser.add_argument('--epochs', default=100, type=int)
     parser.add_argument('--start_epoch', default=0, type=int)
     parser.add_argument('--batch_size', default=32, type=int)
     parser.add_argument('--num_workers', default=32, type=int)
@@ -40,7 +40,7 @@ def get_args_parser():
     parser.add_argument('--topk', default='1-3-5', type=str)
 
     # dataset
-    parser.add_argument('--path', default='./industrial_part_recognition', type=str)
+    parser.add_argument('--path', default='./MVIP/sets', type=str)
     parser.add_argument('--roicrop', default=True, type=bool)
     parser.add_argument('--shuf_views', default=False, type=bool)
     parser.add_argument('--shuf_views_cw', default=True, type=bool)
@@ -111,7 +111,8 @@ def main(args):
         print('Shuffle view wise with p={}'.format(args.p_shuf_vw))
 
     modes = ['train', 'valid', 'test']
-    datasets = {mode: Dataset(args, ds[mode], ds['meta'], mode) for mode in modes}
+    classes = sorted(list(ds['train'].keys()))
+    datasets = {mode: Dataset(args, ds[mode], ds['meta'], mode=mode, classes=classes) for mode in modes}
     args.num_classes = datasets['train'].num_classes
     print('number of classes: {}'.format(args.num_classes))
 
@@ -297,7 +298,7 @@ def main(args):
 
         logs['epoch'] = epoch
         losses = []
-
+        model.train()
         t_step = time.time()
         for step, (x, y) in enumerate(dataloader['train']):
             for key in x:
@@ -346,6 +347,7 @@ def main(args):
         if logs['losses_train'][-1] < logs['best_loss_train'][0]:
             logs['best_loss_train'] = (logs['losses_train'][-1], epoch)
 
+        model.eval()
         losses = []
         for step, (x, y) in enumerate(dataloader['valid']):
             for key in x:
@@ -415,6 +417,7 @@ def main(args):
         t_epoch = t
 
     print('##### Run Test #####')
+    model.eval()
     losses = []
     t_step = time.time()
     for step, (x, y) in enumerate(dataloader['test']):

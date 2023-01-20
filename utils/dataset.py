@@ -34,10 +34,10 @@ def get_dataset(args):
                         _, v_id = v.split('_')
                         sample[v_id] = {
                             'rgb': os.path.join(sdir, v, '{}_rgb.png'.format(v_id)),
-                            'mask': os.path.join(sdir, v, '{}_rgb_mask.png'.format(v_id)),
+                            'mask': os.path.join(sdir, v, '{}_rgb_mask_gen.png'.format(v_id)),
                             'depth': os.path.join(sdir, v, '{}_depth.png'.format(v_id)),
                             'rgb_mean': os.path.join(sdir, v, '{}_rgb_mean.png'.format(v_id)),
-                            'mask_mean': os.path.join(sdir, v, '{}_rgb_mean_mask.png'.format(v_id)),
+                            'mask_mean': os.path.join(sdir, v, '{}_rgb_mean_mask_gen.png'.format(v_id)),
                             'depth_mean': os.path.join(sdir, v, '{}_depth_mean.png'.format(v_id)),
                             'meta': os.path.join(sdir, v, '{}_meta.json'.format(v_id)),
                             'view': v
@@ -63,10 +63,10 @@ def get_dataset(args):
                         _, v_id = v.split('_')
                         sample[v_id] = {
                             'rgb': os.path.join(sdir, v, '{}_rgb.png'.format(v_id)),
-                            'mask': os.path.join(sdir, v, '{}_rgb_mask.png'.format(v_id)),
+                            'mask': os.path.join(sdir, v, '{}_rgb_mask_gen.png'.format(v_id)),
                             'depth': os.path.join(sdir, v, '{}_depth.png'.format(v_id)),
                             'rgb_mean': os.path.join(sdir, v, '{}_rgb_mean.png'.format(v_id)),
-                            'mask_mean': os.path.join(sdir, v, '{}_rgb_mean_mask.png'.format(v_id)),
+                            'mask_mean': os.path.join(sdir, v, '{}_rgb_mean_mask_gen.png'.format(v_id)),
                             'depth_mean': os.path.join(sdir, v, '{}_depth_mean.png'.format(v_id)),
                             'meta': os.path.join(sdir, v, '{}_meta.json'.format(v_id)),
                             'rot': rot,
@@ -82,14 +82,18 @@ def get_dataset(args):
 
 
 class Dataset(data.Dataset):
-    def __init__(self, args, data, meta, mode=False):
+    def __init__(self, args, data, meta, mode=False, classes=None):
         self.args = args
         self.data = data
         self.meta = meta
         self.mode = mode
 
-        self.num_classes = len(data)
-        self.classes = list(data.keys())
+        if classes is None:
+            self.classes = list(data.keys())
+        else:
+            self.classes = classes
+
+        self.num_classes = len(classes)
         if mode != 'train':
             self.eval = True
         else:

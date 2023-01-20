@@ -22,9 +22,9 @@ if __name__ == '__main__':
         '10': '1-2-3-4-5-6-7-8-9-10'
     }
 
-    views_lut = {
-        '3': '1-6-9'
-    }
+    #views_lut = {
+    #    '3': '1-6-9'
+    #}
 
     runs = 10
     main_view = '3'
@@ -32,12 +32,12 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser('MultiView training script', parents=[get_args_parser()])
     args = parser.parse_args()
 
-    add_shuffle_exp = False
-    add_fusion_exp = False
-    add_roi_crop_exp = False
-    add_view_exp = False
-    add_depth_exp = False
-    shuffle_all_views_exp = False
+    add_shuffle_exp = True
+    add_fusion_exp = True
+    add_roi_crop_exp = True
+    add_view_exp = True
+    add_depth_exp = True
+    shuffle_all_views_exp = True
     add_pretrain_exp = False
     add_aug_exps = False
     add_rotation_exps = False

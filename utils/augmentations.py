@@ -5,6 +5,8 @@ import random
 import numpy as np
 import torch
 from PIL import Image
+from utils.perlin_noise import random_binary_perlin_noise
+
 
 class RandomRotation:
     def __init__(self, min_degree=-180,  max_degree=180, uniform: bool = False):
@@ -63,29 +65,108 @@ class ColorJitter:
         return format_string
 
 
-
 class DepthNoise:
-    def __init__(self, max_noise=5.0):
+    def __init__(self, max_noise: float = 3.0, to_meter=False, random_offset_range: float = 200,
+                 perlin_noise_p: float = 0.5, zero_p: float = 0.33, zero_max: float = 0.2,
+                 offset_p: float = 0.9, noise_color_p: float = 0.33, noise_color_max: float = 0.2,
+                 p_random_color_noise: float = 0.33, p_random_color_gray: float = 0.33):
+        if to_meter:
+            max_noise = max_noise / 1000
+            random_offset_range = random_offset_range / 1000
+
         self.max_noise = max_noise
+        self.random_offset_range = random_offset_range
+        self.offset_p = offset_p
+        if self.offset_p > 0:
+            self.apply_offset = True
+        else:
+            self.apply_offset = True
+
+        self.perlin_noise_p = perlin_noise_p
+
+        self.zero_max = zero_max
+        self.zero_p = zero_p
+        if self.zero_p > 0:
+            self.apply_zeros = True
+        else:
+            self.apply_zeros = False
+
+        self.noise_color_p = noise_color_p
+        self.noise_color_max = noise_color_max
+        if self.noise_color_p > 0:
+            self.apply_noise_color = True
+        else:
+            self.apply_noise_color = False
+        self.p_random_color_noise = p_random_color_noise
+        self.p_random_color_gray = p_random_color_gray
 
     def __call__(self, sample):
         if 'depth' in sample:
-            for i in range(len(sample['depth'])):
-                sample['depth'][i] = np.array(sample['depth'][i])
-                noise = (torch.rand(sample['depth'][i].shape).numpy() * 2) - 1
-                noise = np.array(noise * self.max_noise, dtype=np.int32)
-                sample['depth'][i][sample['depth'][i] > self.max_noise] += noise[sample['depth'][i] > self.max_noise]
-                sample['depth'][i] = Image.fromarray(sample['depth'][i])
-
+            do_color = True if 'x' in sample and self.apply_noise_color else False
+            if isinstance(sample['depth'], list):
+                for i in range(len(sample['depth'])):
+                    sample['depth'][i], depth_zeros = self.apply_depth_noise(sample['depth'][i])
+                    if do_color and not depth_zeros:
+                        sample['x'][i] = self.apply_color_noise(sample['x'][i])
+            else:
+                sample['depth'], depth_zeros = self.apply_depth_noise(sample['depth'])
+                if do_color and not depth_zeros:
+                    sample['x'] = self.apply_color_noise(sample['x'])
         return sample
 
-    def __repr__(self):
-        format_string = self.__class__.__name__ + '('
-        format_string += 'brightness={0}'.format(self.brightness)
-        format_string += ', contrast={0}'.format(self.contrast)
-        format_string += ', saturation={0}'.format(self.saturation)
-        format_string += ', hue={0})'.format(self.hue)
-        return format_string
+    def apply_depth_noise(self, depth):
+        depth = np.array(depth)
+        depth_zeros = False
+        if self.apply_zeros:
+            if np.random.rand() < self.zero_p:
+                h, w = depth.shape
+                t = float(np.random.rand()) * self.zero_max
+
+                if np.random.rand() < self.perlin_noise_p:
+                    mask = random_binary_perlin_noise(shape=(h, w), t=t)
+                else:
+                    mask = torch.rand((h, w))
+                    mask = mask < t
+
+                depth[mask] = 0
+                depth_zeros = True
+
+        if self.apply_offset:
+            if np.random.rand() < self.offset_p:
+                offset = float((np.random.rand() - 0.5) * 2) * self.random_offset_range
+                mask = depth > 0
+                depth[mask] = depth[mask] + offset
+                depth[depth < 0] = 0
+
+        noise = (torch.rand(depth.shape).numpy() * 2) - 1
+        noise = np.array(noise * self.max_noise, dtype=np.int32)
+        depth[depth > self.max_noise] += noise[depth > self.max_noise]
+        depth = Image.fromarray(depth)
+        return depth, depth_zeros
+
+    def apply_color_noise(self, color):
+        if np.random.rand() < self.noise_color_p:
+            w, h = color.size
+            color = np.array(color, dtype=np.uint8)
+            t = float(np.random.rand()) * self.noise_color_max
+            if np.random.rand() < self.perlin_noise_p:
+                mask = random_binary_perlin_noise(shape=(h, w), t=t)
+            else:
+                mask = torch.rand((h, w))
+                mask = mask < t
+
+            r = float(np.random.rand())
+            if r < self.p_random_color_noise:
+                noise = np.array(torch.rand(color.shape).numpy() * 255, dtype=np.uint8)
+                color[mask] = noise[mask]
+            elif r < self.p_random_color_gray + self.p_random_color_noise:
+                color[mask] = int(np.random.randint(100, 150))
+            else:
+                color[mask] = 0
+
+            color = Image.fromarray(color)
+        return color
+
 
 
 class RandomFlip:
