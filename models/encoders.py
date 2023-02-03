@@ -137,7 +137,8 @@ class EfficientNet(nn.Module):
 class ResNetRGBD(nn.Module):
     def __init__(self, encoder: str, num_classes: int, pretrained: bool = False, fusion=None,
                  fuse_layers: bool = True, return_layers: bool = False, with_fc: bool = True,
-                 num_fusion_layers: int = 3, depth_channels: int = 1, with_depth: bool = True):
+                 num_fusion_layers: int = 3, depth_channels: int = 1, with_depth: bool = True,
+                 rgbd_wise_multi_head=True):
         super(ResNetRGBD, self).__init__()
 
         self.num_classes = num_classes
@@ -154,6 +155,13 @@ class ResNetRGBD(nn.Module):
         self.fusion_layer2 = None
         self.fusion_layer3 = None
         self.fusion_layer4 = None
+        self.rgbd_wise_multi_head = rgbd_wise_multi_head
+        if self.rgbd_wise_multi_head:
+            self.color_fc = nn.Linear(self.color_encoder.arch.fc.in_features, self.out_channels)
+            self.depth_fc = nn.Linear(self.color_encoder.arch.fc.in_features, self.out_channels)
+        else:
+            self.color_fc = None
+            self.depth_fc = None
 
         if with_depth:
             self.depth_encoder = ResNet(encoder, 0, pretrained=False)
@@ -244,8 +252,17 @@ class ResNetRGBD(nn.Module):
         # fourth layer
         x = self.color_encoder.arch.layer4(x)
 
+        if self.rgbd_wise_multi_head:
+            xs['x'] = self.color_encoder.arch.avgpool(x)
+            xs['x'] = torch.flatten(xs['x'], 1)
+            xs['x'] = self.color_fc(xs['x'])
+
         if depth is not None and self.with_depth:
             depth = self.depth_encoder.arch.layer4(depth)
+            if self.rgbd_wise_multi_head:
+                xs['xd'] = self.depth_encoder.arch.avgpool(x)
+                xs['xd'] = torch.flatten(xs['xd'], 1)
+                xs['xd'] = self.depth_fc(xs['xd'])
             x = self.fusion_layer4(x, depth)
 
         if self.return_layers:
@@ -257,6 +274,9 @@ class ResNetRGBD(nn.Module):
             x = self.color_encoder.arch.fc(x)
             if self.return_layers:
                 xs['out'] = x
+
+        if self.rgbd_wise_multi_head:
+            x = {'out': x, 'x': xs['x'], 'xd': xs['xd']}
 
         if self.return_layers:
             return list(xs.values())

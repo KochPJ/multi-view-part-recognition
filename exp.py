@@ -11,14 +11,20 @@ if __name__ == '__main__':
         '1-b': ['9', '1-6-9'],
         '1-c': ['9', '1-2-3-4-5-6-7-8-9-10'],
         '2': '1-10',
-        '3': '1-6-9',
-        '3-b': ['1-6-9', '1-2-3-4-5-6-7-8-9-10'],
-        '4': '1-3-8-10',
-        '5': '1-3-4-7-9',
-        '6': '1-3-2-4-7-9',
-        '7': '1-2-3-4-7-8-10',
-        '8': '1-2-3-4-7-8-9-10',
-        '9': '1-3-4-5-6-7-8-9-10',
+        '3': ['1-6-9', '1-2-3-4-5-6-7-8-9-10'],#, '1-6-9',
+        '3-b': '1-6-9',
+        '4': ['1-3-8-10', '1-2-3-4-5-6-7-8-9-10'],
+        '4-b': '1-3-8-10',
+        '5': ['1-3-4-7-9', '1-2-3-4-5-6-7-8-9-10'],
+        '5-b': '1-3-4-7-9',
+        '6': ['1-3-2-4-7-9', '1-2-3-4-5-6-7-8-9-10'],
+        '6-b': '1-3-2-4-7-9',
+        '7': ['1-2-3-4-7-8-10', '1-2-3-4-5-6-7-8-9-10'],
+        '7-b': '1-2-3-4-7-8-10',
+        '8': ['1-2-3-4-7-8-9-10', '1-2-3-4-5-6-7-8-9-10'],
+        '8-b': '1-2-3-4-7-8-9-10',
+        '9': ['1-3-4-5-6-7-8-9-10', '1-2-3-4-5-6-7-8-9-10'],
+        '9-b': '1-3-4-5-6-7-8-9-10',
         '10': '1-2-3-4-5-6-7-8-9-10'
     }
 
@@ -26,26 +32,25 @@ if __name__ == '__main__':
     #    '3': '1-6-9'
     #}
 
-    runs = 10
+    runs = 5
     main_view = '3'
 
     parser = argparse.ArgumentParser('MultiView training script', parents=[get_args_parser()])
     args = parser.parse_args()
 
-    add_shuffle_exp = True
+    add_shuffle_exp = False
     add_fusion_exp = True
-    add_roi_crop_exp = True
-    add_view_exp = True
+    add_roi_crop_exp = False
+    add_view_exp = False
     add_depth_exp = True
-    shuffle_all_views_exp = True
+    shuffle_all_views_exp = False
     add_pretrain_exp = False
     add_aug_exps = False
     add_rotation_exps = False
     add_random_view_order_exp = False
-    add_resize_exp = True
-    add_lr_exp = True
-    add_models_exp = True
-
+    add_resize_exp = False
+    add_lr_exp = False
+    add_models_exp = False
     execute = True
 
     rots = ['0', '0-5', '0-4-8', '0-3-6-9', '0-2-5-8-10', '0-2-4-6-8-10', '0-2-4-5-6-8-10', '0-1-3-5-6-8-9-10',
@@ -56,9 +61,11 @@ if __name__ == '__main__':
     outdir = './results'
     exps = []
     new_res = (512, 512)
-    res_runs = 10
-    runs = 1
-    run_start = 0
+
+    depth_epoch_multiplier = 1.5
+    tf_layers = 1
+    runs = 5
+    run_start = 1
     for run in range(run_start, runs):
         outdir_ = os.path.join(outdir, 'run{}'.format(str(run).zfill(3)))
         pretrain_path = [[os.path.join(outdir_,
@@ -107,12 +114,11 @@ if __name__ == '__main__':
                     exps.append(b)
             elif nr == main_view:
                 if add_resize_exp:
-                    for res_r in range(res_runs):
-                        b = copy.deepcopy(a)
-                        setattr(b, 'name', '{}_{}_{}'.format(getattr(b, 'name'), 'new_res', res_r))
-                        setattr(b, 'width', new_res[0])
-                        setattr(b, 'height', new_res[0])
-                        exps.append(copy.deepcopy(b))
+                    b = copy.deepcopy(a)
+                    setattr(b, 'name', '{}_{}'.format(getattr(b, 'name'), 'new_res'))
+                    setattr(b, 'width', new_res[0])
+                    setattr(b, 'height', new_res[0])
+                    exps.append(copy.deepcopy(b))
 
                     b = copy.deepcopy(a)
                     setattr(b, 'name', '{}_{}'.format(getattr(b, 'name'), 'new_res_ms'))
@@ -184,19 +190,54 @@ if __name__ == '__main__':
                     exps.append(b)
 
                 if add_fusion_exp:
-                    for fusion in ['Squeeze&Excite', 'SharedSqueeze&Excite', 'FC', 'Conv']:
+                    for fusion in ['Conv']: #'FC', 'Squeeze&Excite', 'SharedSqueeze&Excite',
                         b = copy.deepcopy(a)
                         setattr(b, 'fusion', fusion)
                         setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'fuse_{}'.format(fusion)))
+                        setattr(b, 'multi_head_classification', False)
+                        setattr(b, 'tf_layers', tf_layers)
+                        exps.append(copy.deepcopy(b))
+                        setattr(b, 'fusion', fusion)
+                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'fuse_{}-multiead'.format(fusion)))
+                        setattr(b, 'multi_head_classification', True)
+                        setattr(b, 'tf_layers', tf_layers)
+                        exps.append(copy.deepcopy(b))
+                        setattr(b, 'fusion', fusion)
+                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'fuse_{}-2multiead'.format(fusion)))
+                        setattr(b, 'multi_head_classification', True)
+                        setattr(b, 'tf_layers', tf_layers*2)
+                        exps.append(copy.deepcopy(b))
+                        setattr(b, 'tf_layers', 0)
+                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'fuse_{}_no_TrFo'.format(fusion)))
+                        setattr(b, 'multi_head_classification', False)
+                        exps.append(copy.deepcopy(b))
+                        setattr(b, 'tf_layers', 0)
+                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'fuse_{}_no_TrFo-multihead'.format(fusion)))
+                        setattr(b, 'multi_head_classification', True)
                         exps.append(copy.deepcopy(b))
 
                 if add_depth_exp:
-                    for fusion in ['Squeeze&Excite', 'Conv']:
+                    for fusion in ['Squeeze&Excite']: #Conv
                         b = copy.deepcopy(a)
+                        setattr(b, 'epochs', int(getattr(a, 'epochs') * depth_epoch_multiplier))
                         setattr(b, 'input_keys', 'x-depth')
                         setattr(b, 'load_keys', 'x-mask-depth')
                         setattr(b, 'depth_fusion', fusion)
                         setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'dfuse_{}'.format(fusion)))
+                        setattr(b, 'multi_head_classification', False)
+                        setattr(b, 'rgbd_wise_multi_head', False)
+                        exps.append(copy.deepcopy(b))
+                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'dfuse_{}_multihead'.format(fusion)))
+                        setattr(b, 'multi_head_classification', False)
+                        setattr(b, 'rgbd_wise_multi_head', False)
+                        exps.append(copy.deepcopy(b))
+                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'dfuse_{}_multihead'.format(fusion)))
+                        setattr(b, 'multi_head_classification', True)
+                        setattr(b, 'rgbd_wise_multi_head', False)
+                        exps.append(copy.deepcopy(b))
+                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'dfuse_{}_multihead-RGBDwise'.format(fusion)))
+                        setattr(b, 'multi_head_classification', True)
+                        setattr(b, 'rgbd_wise_multi_head', True)
                         exps.append(copy.deepcopy(b))
 
                 if add_roi_crop_exp:
@@ -215,7 +256,7 @@ if __name__ == '__main__':
                             setattr(b, 'name', '{}_{}'.format(getattr(b, 'name'), key))
                         exps.append(copy.deepcopy(b))
 
-    arg_keys = ['name', 'multiview', 'roicrop', 'shuf_views', 'shuf_views_cw', 'shuf_views_vw', 'fusion',
+    arg_keys = ['outdir', 'name', 'multiview', 'roicrop', 'shuf_views', 'shuf_views_cw', 'shuf_views_vw', 'fusion',
                 'depth_fusion',
                 'input_keys',
                 'load_keys',
@@ -227,7 +268,8 @@ if __name__ == '__main__':
                 'flip_aug',
                 'outdir',
                 'random_view_order',
-                'lr', 'lr_fusion', 'lr_encoder', 'lr_group_wise']
+                'lr', 'lr_fusion', 'lr_encoder', 'lr_group_wise', 'tf_layers', 'width', 'height',
+                'multi_head_classification', 'rgbd_wise_multi_head', 'epochs']
 
     l = len(exps)
     start_exp = 0

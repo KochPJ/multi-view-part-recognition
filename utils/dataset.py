@@ -154,6 +154,7 @@ class Dataset(data.Dataset):
             if 'depth' in args.input_keys:
                 augs.append(DepthNoise())
             self.augs = transforms.Compose(augs)
+        print('{} |Augmentation transforms: {}'.format(mode, self.augs))
         self.multi_scale = args.multi_scale_training if not self.eval else False
         self.color_pre = transforms.Compose([
             RoiCrop(),
@@ -161,10 +162,13 @@ class Dataset(data.Dataset):
                    multi_scale_training=self.multi_scale,
                    training_scale_low=args.training_scale_low, training_scale_high=args.training_scale_high)
         ])
+
+        print('{} |Color transforms: {}'.format(mode, self.color_pre))
         self.tensor_pre = transforms.Compose([
             ToTensor(),
             Normalize(mean=None, std=None, depth_mean=self.args.depth_mean, depth_std=self.args.depth_std)
         ])
+        print('{} |Tensor transforms: {}'.format(mode, self.tensor_pre))
 
         self.checking_batch_size = False
         self.batch_size = args.batch_size

@@ -56,7 +56,7 @@ class ToTensor:
 
 class RoiCrop:
     def __init__(self, roi_inflation: float = 0.1,
-                 train_random_zoom_max: float = 0.5, train_random_zoom_min: float = -0.1, zoom_mean: float = 0.0,
+                 train_random_zoom_max: float = 0.1, train_random_zoom_min: float = -0.1, zoom_mean: float = 0.0,
                  train_center_jitter: bool = True, train_no_crop: float = 0.0, zoom_std: float = 0.33,
                  p_min: float = 0.1, distribution: str = 'uni'):
 

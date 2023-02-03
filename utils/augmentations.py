@@ -66,9 +66,9 @@ class ColorJitter:
 
 
 class DepthNoise:
-    def __init__(self, max_noise: float = 3.0, to_meter=False, random_offset_range: float = 200,
-                 perlin_noise_p: float = 0.5, zero_p: float = 0.33, zero_max: float = 0.2,
-                 offset_p: float = 0.9, noise_color_p: float = 0.33, noise_color_max: float = 0.2,
+    def __init__(self, max_noise: float = 3.0, to_meter=False, random_offset_range: float = 300,
+                 perlin_noise_p: float = 0.5, zero_p: float = 0.0, zero_max: float = 0.2,
+                 offset_p: float = 0.9, noise_color_p: float = 0.0, noise_color_max: float = 0.2,
                  p_random_color_noise: float = 0.33, p_random_color_gray: float = 0.33):
         if to_meter:
             max_noise = max_noise / 1000
@@ -166,8 +166,6 @@ class DepthNoise:
 
             color = Image.fromarray(color)
         return color
-
-
 
 class RandomFlip:
     def __init__(self, p: float = 0.5, horizontal: bool = True, vertical: bool = True, diagonal: bool = True,

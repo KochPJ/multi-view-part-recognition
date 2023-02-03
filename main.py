@@ -19,10 +19,10 @@ def get_args_parser():
     # training
     parser.add_argument('--name', default='ResNet_34_nr3_1_6_9-res512-ms', type=str)
     parser.add_argument('--outdir', default='./results', type=str)
-    parser.add_argument('--epochs', default=100, type=int)
+    parser.add_argument('--epochs', default=100, type=int) #100
     parser.add_argument('--start_epoch', default=0, type=int)
     parser.add_argument('--batch_size', default=32, type=int)
-    parser.add_argument('--num_workers', default=32, type=int)
+    parser.add_argument('--num_workers', default=34, type=int)
     parser.add_argument('--device', default='cuda:0', type=str)
     parser.add_argument('--multi_gpu', default=True, type=bool)
 
@@ -47,7 +47,7 @@ def get_args_parser():
     parser.add_argument('--shuf_views_vw', default=True, type=bool)
     parser.add_argument('--p_shuf_cw', default=0.3, type=float)
     parser.add_argument('--p_shuf_vw', default=0.3, type=float)
-    parser.add_argument('--data_views', default='1-6-9', type=str) #1-6-9
+    parser.add_argument('--data_views', default='1-2-3-4-5-6-7-8-9-10', type=str) #1-6-9
     parser.add_argument('--views', default='1-6-9', type=str) #1-6-9
     parser.add_argument('--random_view_order', default=False, type=bool)
     parser.add_argument('--rotations', default='0-1-2-3-4-5-6-7-8-9-10-11', type=str)
@@ -60,8 +60,8 @@ def get_args_parser():
     parser.add_argument('--depth_std', default=859.9051176853665, type=float)
     parser.add_argument('--rotation_aug', default=True, type=bool)
     parser.add_argument('--flip_aug', default=True, type=bool)
-    parser.add_argument('--width', default=512, type=int)
-    parser.add_argument('--height', default=512, type=int)
+    parser.add_argument('--width', default=224, type=int)
+    parser.add_argument('--height', default=224, type=int)
     parser.add_argument('--multi_scale_training', default=False, type=bool)
     parser.add_argument('--training_scale_low', default=0.1, type=float)
     parser.add_argument('--training_scale_high', default=0.1, type=float)
@@ -70,11 +70,14 @@ def get_args_parser():
     parser.add_argument('--multiview', default=True, type=bool)
     parser.add_argument('--hidden_channels', default=512, type=int)
     parser.add_argument('--model_name', default='ResNet', type=str)
-    parser.add_argument('--model_version', default='34', type=str)
+    parser.add_argument('--model_version', default='50', type=str)
     parser.add_argument('--fusion', default='Conv', type=str) #['Squeeze&Excite', 'SharedSqueeze&Excite', 'FC', 'Conv']
     parser.add_argument('--pretrained', default=True, type=bool)
     parser.add_argument('--encoder_path', default='', type=str)
     parser.add_argument('--depth_fusion', default='Squeeze&Excite', type=str) #['Squeeze&Excite',  'Conv']
+    parser.add_argument('--tf_layers', default=1, type=int) #['Squeeze&Excite',  'Conv']
+    parser.add_argument('--multi_head_classification', default=False, type=bool)
+    parser.add_argument('--rgbd_wise_multi_head', default=False, type=bool)
 
     # scheduler
     parser.add_argument('--one_cycle', default=True, type=bool)
@@ -307,7 +310,12 @@ def main(args):
             pred = model(**x)
 
             optimizer.zero_grad()
-            loss = criterion(pred, y)
+
+            if isinstance(pred, dict):
+                loss = sum([criterion(pred_, y) for pred_ in pred.values()])/len(pred)
+                pred = pred['out']
+            else:
+                loss = criterion(pred, y)
             loss.backward()
             optimizer.step()
 
@@ -357,7 +365,12 @@ def main(args):
             with torch.no_grad():
                 pred = model(**x)
 
-            loss = criterion(pred, y)
+            if isinstance(pred, dict):
+                loss = sum([criterion(pred_, y) for pred_ in pred.values()])/len(pred)
+                pred = pred['out']
+            else:
+                loss = criterion(pred, y)
+
             losses.append(float(loss.item()))
             for k, m in metrics.items():
                 m.add(pred, y)
@@ -416,6 +429,17 @@ def main(args):
         times['epoch'].append(t-t_epoch)
         t_epoch = t
 
+    print('#### loading best state ####')
+    sd = torch.load(best_dir)['state_dict']
+    if isinstance(model, nn.DataParallel):
+        model = model.module
+    model = model.to('cpu')
+    model.load_state_dict(sd)
+
+    if args.multi_gpu and torch.cuda.device_count() > 1 and args.device != 'cpu':
+        model = nn.DataParallel(model)
+    model = model.to(device)
+
     print('##### Run Test #####')
     model.eval()
     losses = []
@@ -428,7 +452,12 @@ def main(args):
         with torch.no_grad():
             pred = model(**x)
 
-        loss = criterion(pred, y)
+        if isinstance(pred, dict):
+            loss = sum([criterion(pred_, y) for pred_ in pred.values()]) / len(pred)
+            pred = pred['out']
+        else:
+            loss = criterion(pred, y)
+
         losses.append(float(loss.item()))
         for k, m in metrics.items():
             m.add(pred, y)

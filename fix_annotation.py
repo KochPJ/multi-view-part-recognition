@@ -105,8 +105,8 @@ if __name__ == '__main__':
             else:
                 sup[k] += 1
 
-        with open(sample['meta'], 'w') as f:
-            json.dump(data, f)
+        #with open(sample['meta'], 'w') as f:
+        #    json.dump(data, f)
 
     #print('sup', sup)
     print('#### Superclasses #####')
