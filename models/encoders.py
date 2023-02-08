@@ -50,6 +50,7 @@ __efficient_channels__ = {
 __fusion__ = {
     'Squeeze&Excite': dfusion.SqueezeAndExciteFusionAdd,
     'Conv': dfusion.ConvDepthFusion,
+    'Squeeze&Excite-Bi-Directional': dfusion.SqueezeAndExciteFusionAddBiDirectional
 }
 
 
@@ -88,7 +89,17 @@ def get_encoder(args):
                 raise ValueError('Depth fusion {} does not exist. {} are implemented'.format(
                     args.depth_fusion, __fusion__.keys()
                 ))
-            encoder = ResNetRGBD(args.model_version, out_channels, args.pretrained, fusion=fusion)
+            if args.rgbd_version == 'v1':
+                encoder = ResNetRGBD(args.model_version, out_channels, args.pretrained, fusion=fusion)
+            elif args.rgbd_version == 'v2':
+                encoder = ResNetRGBDv2(args.model_version, out_channels, args.pretrained, fusion=fusion)
+            elif args.rgbd_version == 'v3':
+                encoder = ResNetRGBDv3(args.model_version, out_channels, args.pretrained, fusion=fusion)
+            else:
+                raise ValueError('version {} for ResNet RGBD ist not Implemented'.format(args.rgbd_version))
+
+            if args.with_rednet_pretrained:
+                encoder = load_red_net_pretrained(args.rednet_pretrained_path, args.overwrite_imagenet, encoder)
         else:
             encoder = ResNet(args.model_version, out_channels, args.pretrained)
     elif args.model_name == 'EffNet':
@@ -103,6 +114,33 @@ def get_encoder(args):
 
     return encoder
 
+def load_red_net_pretrained(path, overwrite, encoder):
+    sd_ = encoder.state_dict()
+    sd = torch.load(path, map_location='cpu')['state_dict']
+    new_sd = {}
+    counter = 1
+    for key, v in sd.items():
+        if '_d' in key:
+            a = key.split('.')
+            nkey = 'depth_encoder.arch.{}.{}'.format('_'.join(a[0].split('_')[:-1]), '.'.join(a[1:]))
+        else:
+            if not overwrite:
+                continue
+            nkey = 'color_encoder.arch.{}'.format(key)
+
+        if nkey in sd_:
+            counter += 1
+            new_sd[nkey] = v
+
+    missing = []
+    for key in sd_.keys():
+        if key not in new_sd:
+            if 'num_batches_tracked' not in key and 'fc.' not in key and 'fusion' not in key:
+                missing.append(key)
+
+    encoder.load_state_dict(new_sd, strict=False)
+    print('loaded {}/{} for {} weights  from {}'.format(len(new_sd), len(sd), len(sd_), path))
+    return encoder
 
 class ResNet(nn.Module):
     def __init__(self, encoder: str, num_classes: int, pretrained: bool = True):
@@ -140,6 +178,7 @@ class ResNetRGBD(nn.Module):
                  num_fusion_layers: int = 3, depth_channels: int = 1, with_depth: bool = True,
                  rgbd_wise_multi_head=True):
         super(ResNetRGBD, self).__init__()
+        print('ResNetRGBD: v1')
 
         self.num_classes = num_classes
         self.encoder = encoder
@@ -282,3 +321,315 @@ class ResNetRGBD(nn.Module):
             return list(xs.values())
         else:
             return x
+
+
+class ResNetRGBDv2(nn.Module):
+    def __init__(self, encoder: str, num_classes: int, pretrained: bool = False, fusion=None,
+                 fuse_layers: bool = True, return_layers: bool = False, with_fc: bool = True,
+                 num_fusion_layers: int = 3, depth_channels: int = 1, with_depth: bool = True,
+                 rgbd_wise_multi_head=True):
+        super(ResNetRGBDv2, self).__init__()
+        print('ResNetRGBD: v2')
+
+        self.num_classes = num_classes
+        self.encoder = encoder
+        self.return_layers = return_layers
+        self.fuse_layers = fuse_layers
+        self.with_fc = with_fc if num_classes > 0 else False
+        c = num_classes if with_fc else 0
+        self.color_encoder = ResNet(encoder, c, pretrained=pretrained)
+        self.with_depth = with_depth
+        self.out_channels = self.color_encoder.out_channels
+        self.fusion_layer0 = None
+        self.fusion_layer1 = None
+        self.fusion_layer2 = None
+        self.fusion_layer3 = None
+        self.fusion_layer4 = None
+        self.rgbd_wise_multi_head = rgbd_wise_multi_head
+        if self.rgbd_wise_multi_head:
+            self.color_fc = nn.Linear(self.color_encoder.arch.fc.in_features, self.out_channels)
+            self.depth_fc = nn.Linear(self.color_encoder.arch.fc.in_features, self.out_channels)
+        else:
+            self.color_fc = None
+            self.depth_fc = None
+
+        if with_depth:
+            self.depth_encoder = ResNet(encoder, 0, pretrained=False)
+            if depth_channels != 3:
+                self.depth_encoder.arch.conv1 = nn.Conv2d(depth_channels,
+                                                          64,
+                                                          kernel_size=tuple(self.depth_encoder.arch.conv1.kernel_size),
+                                                          stride=tuple(self.depth_encoder.arch.conv1.stride),
+                                                          padding=tuple(self.depth_encoder.arch.conv1.padding),
+                                                          bias=bool(self.depth_encoder.arch.conv1.bias))
+
+            self.fuse = True if fusion is not None else False
+            channels = __resnets_channels__[encoder]
+            args = [arg.name for arg in inspect.signature(fusion).parameters.values()]
+            arg_dict = {'channels': channels[0], 'num_fusion_layers': num_fusion_layers}
+            if self.fuse:
+                self.fusion_layer0 = fusion(**{arg: arg_dict[arg] for arg in args if arg in arg_dict}) \
+                    if fuse_layers else None
+                arg_dict['channels'] = channels[1]
+                self.fusion_layer1 = fusion(**{arg: arg_dict[arg] for arg in args if arg in arg_dict}) \
+                    if fuse_layers else None
+                arg_dict['channels'] = channels[2]
+                self.fusion_layer2 = fusion(**{arg: arg_dict[arg] for arg in args if arg in arg_dict}) \
+                    if fuse_layers else None
+                arg_dict['channels'] = channels[3]
+                self.fusion_layer3 = fusion(**{arg: arg_dict[arg] for arg in args if arg in arg_dict}) \
+                    if fuse_layers else None
+                arg_dict['channels'] = channels[4]
+            self.fusion_layer4 = fusion(**{arg: arg_dict[arg] for arg in args if arg in arg_dict})
+
+    def forward(self, x, depth):
+        xs = {}
+        if self.return_layers:
+            xs['input'] = x
+        x = self.color_encoder.arch.conv1(x)
+        x = self.color_encoder.arch.bn1(x)
+        x = self.color_encoder.arch.relu(x)
+
+        if depth is not None and self.with_depth:
+            depth = self.depth_encoder.arch.conv1(depth)
+            depth = self.depth_encoder.arch.bn1(depth)
+            depth = self.depth_encoder.arch.relu(depth)
+
+        if self.fuse_layers and depth is not None and self.with_depth:
+            depth = self.fusion_layer0(x, depth)
+
+        if self.return_layers:
+            xs['layer0'] = x
+
+        # first layer
+        x = self.color_encoder.arch.maxpool(x)
+        x = self.color_encoder.arch.layer1(x)
+
+        if depth is not None and self.with_depth:
+            depth = self.depth_encoder.arch.maxpool(depth)
+            depth = self.depth_encoder.arch.layer1(depth)
+
+        if self.fuse_layers and depth is not None and self.with_depth:
+            depth = self.fusion_layer1(x, depth)
+
+        if self.return_layers:
+            xs['layer1'] = x
+
+        # second layer
+        x = self.color_encoder.arch.layer2(x)
+
+        if depth is not None and self.with_depth:
+            depth = self.depth_encoder.arch.layer2(depth)
+
+            if self.fuse_layers:
+                depth = self.fusion_layer2(x, depth)
+
+        if self.return_layers:
+            xs['layer2'] = x
+
+        # third layer
+        x = self.color_encoder.arch.layer3(x)
+
+        if depth is not None and self.with_depth:
+            depth = self.depth_encoder.arch.layer3(depth)
+
+            if self.fuse_layers:
+                depth = self.fusion_layer3(x, depth)
+
+        if self.return_layers:
+            xs['layer3'] = x
+
+        # fourth layer
+        x = self.color_encoder.arch.layer4(x)
+
+        if self.rgbd_wise_multi_head:
+            xs['x'] = self.color_encoder.arch.avgpool(x)
+            xs['x'] = torch.flatten(xs['x'], 1)
+            xs['x'] = self.color_fc(xs['x'])
+
+        if depth is not None and self.with_depth:
+            depth = self.depth_encoder.arch.layer4(depth)
+            if self.rgbd_wise_multi_head:
+                xs['xd'] = self.depth_encoder.arch.avgpool(x)
+                xs['xd'] = torch.flatten(xs['xd'], 1)
+                xs['xd'] = self.depth_fc(xs['xd'])
+            x = self.fusion_layer4(x, depth)
+
+        if self.return_layers:
+            xs['layer4'] = x
+
+        if self.with_fc:
+            x = self.color_encoder.arch.avgpool(x)
+            x = torch.flatten(x, 1)
+            x = self.color_encoder.arch.fc(x)
+            if self.return_layers:
+                xs['out'] = x
+
+        if self.rgbd_wise_multi_head:
+            x = {'out': x, 'x': xs['x'], 'xd': xs['xd']}
+
+        if self.return_layers:
+            return list(xs.values())
+        else:
+            return x
+
+
+class ResNetRGBDv3(nn.Module):
+    def __init__(self, encoder: str, num_classes: int, pretrained: bool = False, fusion=None,
+                 fuse_layers: bool = True, return_layers: bool = False, with_fc: bool = True,
+                 num_fusion_layers: int = 3, depth_channels: int = 1, with_depth: bool = True,
+                 rgbd_wise_multi_head=True):
+        super(ResNetRGBDv3, self).__init__()
+        print('ResNetRGBD: v3')
+        self.num_classes = num_classes
+        self.encoder = encoder
+        self.return_layers = return_layers
+        self.fuse_layers = fuse_layers
+        self.with_fc = with_fc if num_classes > 0 else False
+        c = num_classes if with_fc else 0
+        self.color_encoder = ResNet(encoder, c, pretrained=pretrained)
+        self.with_depth = with_depth
+        self.out_channels = self.color_encoder.out_channels
+        self.fusion_layer0 = None
+        self.fusion_layer1 = None
+        self.fusion_layer2 = None
+        self.fusion_layer3 = None
+        self.fusion_layer4 = None
+        self.rgbd_wise_multi_head = rgbd_wise_multi_head
+        if self.rgbd_wise_multi_head:
+            self.color_fc = nn.Linear(self.color_encoder.arch.fc.in_features, self.out_channels)
+            self.depth_fc = nn.Linear(self.color_encoder.arch.fc.in_features, self.out_channels)
+        else:
+            self.color_fc = None
+            self.depth_fc = None
+
+        if with_depth:
+            self.depth_encoder = ResNet(encoder, 0, pretrained=False)
+            if depth_channels != 3:
+                self.depth_encoder.arch.conv1 = nn.Conv2d(depth_channels,
+                                                          64,
+                                                          kernel_size=tuple(self.depth_encoder.arch.conv1.kernel_size),
+                                                          stride=tuple(self.depth_encoder.arch.conv1.stride),
+                                                          padding=tuple(self.depth_encoder.arch.conv1.padding),
+                                                          bias=bool(self.depth_encoder.arch.conv1.bias))
+
+            self.fuse = True if fusion is not None else False
+            channels = __resnets_channels__[encoder]
+            args = [arg.name for arg in inspect.signature(fusion).parameters.values()]
+            arg_dict = {'channels': channels[0], 'num_fusion_layers': num_fusion_layers}
+            if self.fuse:
+                self.fusion_layer0 = fusion(**{arg: arg_dict[arg] for arg in args if arg in arg_dict}) \
+                    if fuse_layers else None
+                arg_dict['channels'] = channels[1]
+                self.fusion_layer1 = fusion(**{arg: arg_dict[arg] for arg in args if arg in arg_dict}) \
+                    if fuse_layers else None
+                arg_dict['channels'] = channels[2]
+                self.fusion_layer2 = fusion(**{arg: arg_dict[arg] for arg in args if arg in arg_dict}) \
+                    if fuse_layers else None
+                arg_dict['channels'] = channels[3]
+                self.fusion_layer3 = fusion(**{arg: arg_dict[arg] for arg in args if arg in arg_dict}) \
+                    if fuse_layers else None
+                arg_dict['channels'] = channels[4]
+            self.fusion_layer4 = fusion(**{arg: arg_dict[arg] for arg in args if arg in arg_dict})
+
+    def forward(self, x, depth):
+        xs = {}
+        if self.return_layers:
+            xs['input'] = x
+        x = self.color_encoder.arch.conv1(x)
+        x = self.color_encoder.arch.bn1(x)
+        x = self.color_encoder.arch.relu(x)
+
+        if depth is not None and self.with_depth:
+            depth = self.depth_encoder.arch.conv1(depth)
+            depth = self.depth_encoder.arch.bn1(depth)
+            depth = self.depth_encoder.arch.relu(depth)
+
+        if self.fuse_layers and depth is not None and self.with_depth:
+            x, depth = self.fusion_layer0(x, depth)
+
+        if self.return_layers:
+            xs['layer0'] = x
+
+        # first layer
+        x = self.color_encoder.arch.maxpool(x)
+        x = self.color_encoder.arch.layer1(x)
+
+        if depth is not None and self.with_depth:
+            depth = self.depth_encoder.arch.maxpool(depth)
+            depth = self.depth_encoder.arch.layer1(depth)
+
+        if self.fuse_layers and depth is not None and self.with_depth:
+            x, depth = self.fusion_layer1(x, depth)
+
+        if self.return_layers:
+            xs['layer1'] = x
+
+        # second layer
+        x = self.color_encoder.arch.layer2(x)
+
+        if depth is not None and self.with_depth:
+            depth = self.depth_encoder.arch.layer2(depth)
+
+            if self.fuse_layers:
+                x, depth = self.fusion_layer2(x, depth)
+
+        if self.return_layers:
+            xs['layer2'] = x
+
+        # third layer
+        x = self.color_encoder.arch.layer3(x)
+
+        if depth is not None and self.with_depth:
+            depth = self.depth_encoder.arch.layer3(depth)
+
+            if self.fuse_layers:
+                x, depth = self.fusion_layer3(x, depth)
+
+        if self.return_layers:
+            xs['layer3'] = x
+
+        # fourth layer
+        x = self.color_encoder.arch.layer4(x)
+
+        if self.rgbd_wise_multi_head:
+            xs['x'] = self.color_encoder.arch.avgpool(x)
+            xs['x'] = torch.flatten(xs['x'], 1)
+            xs['x'] = self.color_fc(xs['x'])
+
+        if depth is not None and self.with_depth:
+            depth = self.depth_encoder.arch.layer4(depth)
+            if self.rgbd_wise_multi_head:
+                xs['xd'] = self.depth_encoder.arch.avgpool(x)
+                xs['xd'] = torch.flatten(xs['xd'], 1)
+                xs['xd'] = self.depth_fc(xs['xd'])
+            x, depth = self.fusion_layer4(x, depth)
+
+        if self.return_layers:
+            xs['layer4'] = x
+
+        if self.with_fc:
+            x = self.color_encoder.arch.avgpool(x)
+            x = torch.flatten(x, 1)
+            x = self.color_encoder.arch.fc(x)
+            if self.return_layers:
+                xs['out'] = x
+
+        if self.rgbd_wise_multi_head:
+            x = {'out': x, 'x': xs['x'], 'xd': xs['xd']}
+
+        if self.return_layers:
+            return list(xs.values())
+        else:
+            return x
+
+
+if __name__ == '__main__':
+    path = '/home/kochpaul/Downloads/rednet_ckpt.pth'
+    over = False
+    m = ResNetRGBD('50', 1, fusion=__fusion__['Squeeze&Excite'])
+    load_red_net_pretrained(path, over, m)
+    m = ResNetRGBDv2('50', 1, fusion=__fusion__['Squeeze&Excite'])
+    load_red_net_pretrained(path, over, m)
+    m = ResNetRGBDv3('50', 1, fusion=__fusion__['Squeeze&Excite'])
+    load_red_net_pretrained(path, over, m)

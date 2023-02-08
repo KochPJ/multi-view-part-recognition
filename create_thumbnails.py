@@ -9,8 +9,8 @@ if __name__ == '__main__':
 
     roi = RoiCrop()
     m = 512
-    kh = 50
-    kw = 10
+    kh = 10
+    kw = 50
 
     dpi = 600
     resize = Resize(height=m, width=m)
@@ -20,8 +20,8 @@ if __name__ == '__main__':
 
 
     for count, cls in enumerate(classes):
-        path = '/home/kochpaul/git/multi-view-part-recognition/industrial_part_recognition/{}/train_data/0/0'.format(cls)
-        out = '/home/kochpaul/images'
+        path = '/mnt/share/more_datasets/MVIP/sets/{}/train_data/0/0/'.format(cls)
+        out = '/home/kochpaul/images2'
         print('{}/{} | {}'.format(count+1, len(classes), cls))
 
         ns = [10]
@@ -42,7 +42,7 @@ if __name__ == '__main__':
                 _, nr = view.split('_')
                 s = {'x': [Image.open(os.path.join(path, view, '{}_rgb.png'.format(nr)))],
                      'depth': [Image.open(os.path.join(path, view, '{}_depth.png'.format(nr)))],
-                     'mask': [Image.open(os.path.join(path, view, '{}_rgb_mask.png'.format(nr)))],
+                     'mask': [Image.open(os.path.join(path, view, '{}_rgb_mask_gen.png'.format(nr)))],
                      'mode': 'test'}
                 s = resize(roi(s))
                 print(j * kh, j * kh + m, j * kw, j * kw + m, np.array(s['depth'][0]).shape)
@@ -64,18 +64,12 @@ if __name__ == '__main__':
             plt.axis('off')
             plt.savefig(op, bbox_inches='tight', pad_inches=0, dpi=dpi)
 
-            #plt.show()
+            plt.show()
 
             plt.imshow(depth)
             plt.axis('off')
-            plt.savefig(op, bbox_inches='tight', pad_inches=0, dpi=dpi)
-
-
-            input()
-
-
-
-
+            plt.savefig(opd, bbox_inches='tight', pad_inches=0, dpi=dpi)
+            plt.show()
 
 
 
@@ -99,7 +93,7 @@ if __name__ == '__main__':
                 #print(view)
                 _, nr = view.split('_')
                 s = {'x': [Image.open(os.path.join(path, view, '{}_rgb.png'.format(nr)))],
-                     'mask': [Image.open(os.path.join(path, view, '{}_rgb_mask.png'.format(nr)))],
+                     'mask': [Image.open(os.path.join(path, view, '{}_rgb_mask_gen.png'.format(nr)))],
                      'mode': 'test'}
                 s = resize(roi(s))
                 #samples.append(s)
@@ -117,7 +111,7 @@ if __name__ == '__main__':
 
             plt.imshow(img)
             plt.axis('off')
-            #plt.show()
+            plt.show()
 
             k = 0
             op = os.path.join(out, '{}_{}.png'.format(cls, k))

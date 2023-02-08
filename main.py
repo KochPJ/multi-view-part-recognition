@@ -21,8 +21,8 @@ def get_args_parser():
     parser.add_argument('--outdir', default='./results', type=str)
     parser.add_argument('--epochs', default=100, type=int) #100
     parser.add_argument('--start_epoch', default=0, type=int)
-    parser.add_argument('--batch_size', default=32, type=int)
-    parser.add_argument('--num_workers', default=34, type=int)
+    parser.add_argument('--batch_size', default=32, type=int) #32
+    parser.add_argument('--num_workers', default=34, type=int) #34
     parser.add_argument('--device', default='cuda:0', type=str)
     parser.add_argument('--multi_gpu', default=True, type=bool)
 
@@ -44,6 +44,7 @@ def get_args_parser():
     parser.add_argument('--roicrop', default=True, type=bool)
     parser.add_argument('--shuf_views', default=False, type=bool)
     parser.add_argument('--shuf_views_cw', default=True, type=bool)
+    parser.add_argument('--shuf_views_cw_disable', default=0.5, type=float)
     parser.add_argument('--shuf_views_vw', default=True, type=bool)
     parser.add_argument('--p_shuf_cw', default=0.3, type=float)
     parser.add_argument('--p_shuf_vw', default=0.3, type=float)
@@ -71,13 +72,20 @@ def get_args_parser():
     parser.add_argument('--hidden_channels', default=512, type=int)
     parser.add_argument('--model_name', default='ResNet', type=str)
     parser.add_argument('--model_version', default='50', type=str)
+    parser.add_argument('--rgbd_version', default='v1', type=str)
     parser.add_argument('--fusion', default='Conv', type=str) #['Squeeze&Excite', 'SharedSqueeze&Excite', 'FC', 'Conv']
     parser.add_argument('--pretrained', default=True, type=bool)
+    parser.add_argument('--with_rednet_pretrained', default=False, type=bool)
+    parser.add_argument('--rednet_pretrained_path', default='/home/kochpaul/Downloads/rednet_ckpt.pth', type=str)
+    parser.add_argument('--overwrite_imagenet', default=True, type=bool)
     parser.add_argument('--encoder_path', default='', type=str)
     parser.add_argument('--depth_fusion', default='Squeeze&Excite', type=str) #['Squeeze&Excite',  'Conv']
     parser.add_argument('--tf_layers', default=1, type=int) #['Squeeze&Excite',  'Conv']
-    parser.add_argument('--multi_head_classification', default=False, type=bool)
-    parser.add_argument('--rgbd_wise_multi_head', default=False, type=bool)
+    parser.add_argument('--multi_head_classification', default=True, type=bool)
+    parser.add_argument('--rgbd_wise_multi_head', default=True, type=bool)
+    parser.add_argument('--with_positional_encoding', default=False, type=bool)
+    parser.add_argument('--learnable_pe', default=False, type=bool)
+    parser.add_argument('--pc_embed_channels', default=64, type=int)
 
     # scheduler
     parser.add_argument('--one_cycle', default=True, type=bool)
@@ -100,6 +108,7 @@ def main(args):
     logs_dir = os.path.join(args.outdir, '{}_logs.log'.format(args.name))
     if os.path.exists(current_dir):
         cp = torch.load(current_dir)
+        print('loaded current checkpoint from {}'.format(current_dir))
     else:
         cp = None
 
@@ -192,15 +201,17 @@ def main(args):
     if not args.shuf_views_cw and args.shuf_views:
         print('Using BCEWithLogitsLoss')
         criterion = nn.BCEWithLogitsLoss()
+        binary_cross = True
     else:
         print('Using CrossEntropyLoss')
         criterion = nn.CrossEntropyLoss()
+        binary_cross = False
 
     # set device, build model, push model to device and load a checkpoint if given
     device = torch.device(args.device)
     model = get_model(args)
     if cp is not None:
-        print('loading model state dict')
+        print('loading current model state dict from {}'.format(current_dir))
         model.load_state_dict(cp['state_dict'])
 
     if args.multi_gpu and torch.cuda.device_count() > 1 and args.device != 'cpu':
@@ -261,7 +272,7 @@ def main(args):
         optimizer.load_state_dict(cp['optimizer'])
         scheduler.load_state_dict(cp['scheduler'])
         logs = cp['logs']
-        args.start_epoch = logs['epoch']
+        args.start_epoch = logs['epoch'] + 1
     else:
         logs = {
             'best_loss_train': (np.Inf, None),
@@ -299,20 +310,44 @@ def main(args):
         else:
             dataloader['train'].dataset.checking_batch_size = False
 
+        if not args.shuf_views_cw and args.shuf_views and args.shuf_views_cw_disable > 0:
+            if epoch == int(args.epochs * args.shuf_views_cw_disable):
+                print('Switching to Class-Wise-Shuffling, thus switching to CrossEntropyLoss')
+                criterion = nn.CrossEntropyLoss()
+                binary_cross = False
+                for key in dataloader.keys():
+                    setattr(dataloader[key].dataset.args, 'shuf_views_cw', True)
+
         logs['epoch'] = epoch
         losses = []
         model.train()
         t_step = time.time()
         for step, (x, y) in enumerate(dataloader['train']):
+            #if step == 4:
+            #    break
             for key in x:
                 x[key] = x[key].to(device)
-            y = y.to(device)
+            if isinstance(y, dict):
+                for key in y:
+                    y[key] = y[key].to(device)
+            else:
+                y = y.to(device)
             pred = model(**x)
 
             optimizer.zero_grad()
 
             if isinstance(pred, dict):
-                loss = sum([criterion(pred_, y) for pred_ in pred.values()])/len(pred)
+                if binary_cross:
+                    bi_c_loss = []
+                    for bi_key, bi_pred in pred.items():
+                        for bi_y in y.keys():
+                            if bi_y in bi_key:
+                                bi_c_loss.append(criterion(bi_pred, y[bi_y]))
+                                break
+                    loss = sum(bi_c_loss) / len(bi_c_loss)
+                    y = y['out']
+                else:
+                    loss = sum([criterion(pred_, y) for pred_ in pred.values()])/len(pred)
                 pred = pred['out']
             else:
                 loss = criterion(pred, y)
@@ -322,7 +357,10 @@ def main(args):
             losses.append(float(loss.item()))
             for k, m in metrics.items():
                 m.add(pred, y)
-            scheduler.step()
+            try:
+                scheduler.step()
+            except:
+                pass
             t = time.time()
             times['train'].append(t - t_step)
             t_step = t
@@ -358,15 +396,32 @@ def main(args):
         model.eval()
         losses = []
         for step, (x, y) in enumerate(dataloader['valid']):
+            #if step == 4:
+            #    break
             for key in x:
                 x[key] = x[key].to(device)
-            y = y.to(device)
+
+            if isinstance(y, dict):
+                for key in y:
+                    y[key] = y[key].to(device)
+            else:
+                y = y.to(device)
 
             with torch.no_grad():
                 pred = model(**x)
 
             if isinstance(pred, dict):
-                loss = sum([criterion(pred_, y) for pred_ in pred.values()])/len(pred)
+                if binary_cross:
+                    bi_c_loss = []
+                    for bi_key, bi_pred in pred.items():
+                        for bi_y in y.keys():
+                            if bi_y in bi_key:
+                                bi_c_loss.append(criterion(bi_pred, y[bi_y]))
+                                break
+                    loss = sum(bi_c_loss) / len(bi_c_loss)
+                    y = y['out']
+                else:
+                    loss = sum([criterion(pred_, y) for pred_ in pred.values()])/len(pred)
                 pred = pred['out']
             else:
                 loss = criterion(pred, y)
@@ -445,15 +500,32 @@ def main(args):
     losses = []
     t_step = time.time()
     for step, (x, y) in enumerate(dataloader['test']):
+        #if step == 4:
+        #    break
         for key in x:
             x[key] = x[key].to(device)
-        y = y.to(device)
+
+        if isinstance(y, dict):
+            for key in y:
+                y[key] = y[key].to(device)
+        else:
+            y = y.to(device)
 
         with torch.no_grad():
             pred = model(**x)
 
         if isinstance(pred, dict):
-            loss = sum([criterion(pred_, y) for pred_ in pred.values()]) / len(pred)
+            if binary_cross:
+                bi_c_loss = []
+                for bi_key, bi_pred in pred.items():
+                    for bi_y in y.keys():
+                        if bi_y in bi_key:
+                            bi_c_loss.append(criterion(bi_pred, y[bi_y]))
+                            break
+                loss = sum(bi_c_loss) / len(bi_c_loss)
+                y = y['out']
+            else:
+                loss = sum([criterion(pred_, y) for pred_ in pred.values()]) / len(pred)
             pred = pred['out']
         else:
             loss = criterion(pred, y)

@@ -1,12 +1,45 @@
 from torch import nn
 import torch
 import torch.nn.functional as F
+import numpy as np
 from einops import rearrange, repeat
 from einops.layers.torch import Rearrange
+from models.transformer import TransformerEncoderDecoder
+import math
+
+class MaxPool(nn.Module):
+    def __init__(self, num_views: int):
+        super().__init__()
+        self.pool = nn.MaxPool1d(kernel_size=num_views)
+
+    def __call__(self, x):
+        return self.pool(x.permute(0, 2, 1)).squeeze(-1)
+
+
+class AveragePool(nn.Module):
+    def __init__(self, num_views: int):
+        super().__init__()
+        self.pool = nn.AvgPool1d(kernel_size=num_views)
+
+    def __call__(self, x):
+        return self.pool(x.permute(0, 2, 1)).squeeze(-1)
+
+
+class Mean(nn.Module):
+    def __init__(self, num_views: int):
+        super().__init__()
+        self.pool = nn.AvgPool1d(kernel_size=num_views)
+
+    def __call__(self, x):
+        return torch.mean(x, dim=1)
 
 
 class FCMultiViewFusion(nn.Module):
-    def __init__(self, channels: int, num_views: int, num_fusion_layers: int = 3):
+    def __init__(self, channels: int, num_views: int, num_fusion_layers: int = 3, pc_embed_channels=64):
+        self.pc_embed_channels = pc_embed_channels
+        self.channels = channels
+        self.num_views = num_views
+
         super().__init__()
         if num_fusion_layers > 1:
             c = channels * num_views
@@ -21,8 +54,12 @@ class FCMultiViewFusion(nn.Module):
         else:
             self.fusion = nn.Linear(channels * num_views, channels)
 
-    def forward(self, x):
+    def forward(self, x, weight=None):
         x = x.flatten(1)
+        if weight is not None:
+            weight_ = torch.zeros((len(x), self.channels * self.num_views))
+            weight_[:, :self.pc_embed_channels] = get_pos_embed(weight, self.pc_embed_channels).squeeze(1)
+            x = x + weight_.to(x.device)
         return self.fusion(x)
 
 
@@ -166,6 +203,23 @@ class SqueezeAndExciteFusionAdd(nn.Module):
         return out
 
 
+class SqueezeAndExciteFusionAddBiDirectional(nn.Module):
+    '''
+        Copied from https://github.com/TUI-NICR/ESANet
+        paper title: Efficient RGB-D Semantic Segmentation for Indoor Scene Analysis
+        authros: Seichter, Daniel and K{\"o}hler, Mona and Lewandowski, Benjamin and Wengefeld, Tim and Gross, Horst-Michael
+    '''
+    def __init__(self, channels, activation=nn.ReLU(inplace=True)):
+        super(SqueezeAndExciteFusionAddBiDirectional, self).__init__()
+        self.se_rgb = SqueezeAndExcitation(channels, activation=activation)
+        self.se_depth = SqueezeAndExcitation(channels, activation=activation)
+        self.se_rgb2 = SqueezeAndExcitation(channels, activation=activation)
+        self.se_depth2 = SqueezeAndExcitation(channels, activation=activation)
+
+    def forward(self, rgb, depth):
+        return self.se_rgb(rgb) + self.se_depth(depth), self.se_rgb2(rgb) + self.se_depth2(depth)
+
+
 class PreNorm(nn.Module):
     def __init__(self, dim, fn):
         super().__init__()
@@ -173,6 +227,7 @@ class PreNorm(nn.Module):
         self.fn = fn
     def forward(self, x, **kwargs):
         return self.fn(self.norm(x), **kwargs)
+
 
 class FeedForward(nn.Module):
     def __init__(self, dim, hidden_dim, dropout = 0.):
@@ -196,6 +251,7 @@ class PreNorm(nn.Module):
     def forward(self, x, **kwargs):
         return self.fn(self.norm(x), **kwargs)
 
+
 class FeedForward(nn.Module):
     def __init__(self, dim, hidden_dim, dropout = 0.):
         super().__init__()
@@ -208,6 +264,7 @@ class FeedForward(nn.Module):
         )
     def forward(self, x):
         return self.net(x)
+
 
 class Attention(nn.Module):
     def __init__(self, dim, heads=8, dim_head=64, dropout=0.):
@@ -229,8 +286,8 @@ class Attention(nn.Module):
         ) if project_out else nn.Identity()
 
     def forward(self, x):
-        qkv = self.to_qkv(x).chunk(3, dim = -1)
-        q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h = self.heads), qkv)
+        qkv = self.to_qkv(x).chunk(3, dim=-1)
+        q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h=self.heads), qkv)
 
         dots = torch.matmul(q, k.transpose(-1, -2)) * self.scale
 
@@ -240,6 +297,7 @@ class Attention(nn.Module):
         out = torch.matmul(attn, v)
         out = rearrange(out, 'b h n d -> b n (h d)')
         return self.to_out(out)
+
 
 class Transformer(nn.Module):
     def __init__(self, dim, depth, heads, dim_head, mlp_dim, dropout=0.):
@@ -256,21 +314,170 @@ class Transformer(nn.Module):
             x = ff(x) + x
         return x
 
+
 class TransformerMultiViewHead(nn.Module):
-    def __init__(self, channels, layers=1, heads=8):
+    def __init__(self, channels, num_views, layers=1, heads=8, with_positional_encoding=False, learnable_pe=False,
+                 pc_embed_channels=64):
         super().__init__()
+        self.num_views = num_views
+        self.with_positional_encoding = with_positional_encoding
+        self.learnable_pe = learnable_pe
+        self.channels = channels
+        self.pc_embed_channels = pc_embed_channels
         self.tf = Transformer(channels, layers, heads, channels, channels)
+        if self.with_positional_encoding:
+            if self.learnable_pe:
+                self.pos_emb = nn.Embedding(self.num_views, self.channels)
+            else:
+                self.pos_emb = torch.zeros((self.num_views, self.channels))
+                self.pos_emb[:, :self.pc_embed_channels] = get_pos_embed(torch.arange(0, self.num_views).unsqueeze(0),
+                                                                         pc_embed_channels).squeeze(0)
+        else:
+            self.pos_emb = None
+
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        if self.with_positional_encoding and self.learnable_pe:
+            nn.init.uniform_(self.pos_emb.weight)
 
     def __call__(self, x):
+        if self.pos_emb is not None:
+            if self.learnable_pe:
+                pos_embed = self.pos_emb.weight
+            else:
+                pos_embed = self.pos_emb.to(x.device)
+            x = x + pos_embed
         return self.tf(x)
 
 
+class TransformerMultiViewHeadDecoder(nn.Module):
+    def __init__(self, channels, num_views, layers=1, heads=8, with_positional_encoding=False, learnable_pe=False,
+                 pc_embed_channels=64):
+        super().__init__()
+        self.num_views = num_views + 1
+        self.with_positional_encoding = with_positional_encoding
+        self.learnable_pe = learnable_pe
+        self.channels = channels
+        self.pc_embed_channels = pc_embed_channels
+        self.tf = Transformer(channels, layers, heads, channels, channels)
+        if self.with_positional_encoding:
+            if self.learnable_pe:
+                self.pos_emb = nn.Embedding(self.num_views, self.channels)
+            else:
+                self.pos_emb = torch.zeros((self.num_views, self.channels))
+                self.pos_emb[:, :self.pc_embed_channels] = get_pos_embed(torch.arange(0, self.num_views).unsqueeze(0),
+                                                                         pc_embed_channels).squeeze(0)
+        else:
+            self.pos_emb = None
+
+        self.query_emb = nn.Embedding(1, self.channels)
+
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        if self.with_positional_encoding and self.learnable_pe:
+            nn.init.uniform_(self.pos_emb.weight)
+
+    def __call__(self, x, weight=None):
+        query = self.query_emb.weight.repeat(len(x), 1)
+        if weight is not None:
+            weight_ = torch.zeros((len(x), self.channels))
+            weight_[:, :self.pc_embed_channels] = get_pos_embed(weight, self.pc_embed_channels).squeeze(1)
+            query = query + weight_.to(query.device)
+
+        x = torch.hstack([query.unsqueeze(1), x])
+        if self.pos_emb is not None:
+            if self.learnable_pe:
+                pos_embed = self.pos_emb.weight
+            else:
+                pos_embed = self.pos_emb.to(x.device)
+            x = x + pos_embed
+        return self.tf(x)[:, 0]
+
+
+class TransfomerEncoderDecoderMultiViewHead(nn.Module):
+    def __init__(self, channels, num_views, layers=1, heads=8, dim_feedforward=2048, activation="relu",
+                 normalize_before=False, return_intermediate_dec=False, with_positional_encoding=True,
+                 pc_embed_channels=64, learnable_pe=False):
+        super().__init__()
+        self.tf = TransformerEncoderDecoder(d_model=channels, nhead=heads, num_encoder_layers=layers,
+                                            num_decoder_layers=layers, dim_feedforward=dim_feedforward,
+                                            activation=activation, normalize_before=normalize_before,
+                                            return_intermediate_dec=return_intermediate_dec)
+        self.query_embed = nn.Embedding(1, channels)
+
+        self.with_positional_encoding = with_positional_encoding
+        self.learnable_pe = learnable_pe
+        self.pc_embed_channels = pc_embed_channels
+        self.num_views = num_views
+        self.channels = channels
+        if self.with_positional_encoding:
+            if self.learnable_pe:
+                self.pos_emb = nn.Embedding(self.num_views, self.channels)
+            else:
+                self.pos_emb = torch.zeros((self.num_views, self.channels))
+                self.pos_emb[:, :self.pc_embed_channels] = get_pos_embed(torch.arange(0, self.num_views).unsqueeze(0),
+                                                                         pc_embed_channels).squeeze(0)
+
+        else:
+            self.pos_emb = None
+
+        self.query_emb = nn.Embedding(1, self.channels)
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        if self.with_positional_encoding and self.learnable_pe:
+            nn.init.uniform_(self.pos_emb.weight)
+
+    def __call__(self, x, weight=None):
+
+        if self.pos_emb is not None:
+            if self.learnable_pe:
+                pos_embed = self.pos_emb.weight
+            else:
+                pos_embed = self.pos_emb.to(x.device)
+        else:
+            pos_embed = None
+        query = self.query_embed.weight.repeat(len(x), 1)
+
+        if weight is not None:
+            weight_ = torch.zeros((len(x), self.channels))
+            weight_[:, :self.pc_embed_channels] = get_pos_embed(weight, self.pc_embed_channels).squeeze(1)
+            query = query + weight_.to(query.device)
+
+        out, _ = self.tf(x, None, query, pos_embed)
+        return out.squeeze(1)
+
+def get_pos_embed(x, num_pos_feats=64, temperature=2000, scale=100*math.pi):
+    if scale is None:
+        scale = 2 * math.pi
+        x = x * scale
+
+    dim_t = torch.arange(num_pos_feats, dtype=torch.float32)
+    dim_t = (2 * torch.div(dim_t, 2, rounding_mode='trunc')) / num_pos_feats
+    dim_t = temperature ** dim_t  # dim_t // 2
+    dim_t = dim_t.to(x.device)
+    x = x[:, :, None] / dim_t
+    x = torch.stack((x[:, :, 0::2].sin(),
+                     x[:, :, 1::2].cos()), dim=3).flatten(2)
+    return x
+
+
 if __name__ == '__main__':
+
     c = 512
-    m = TransformerMultiViewHead(c)
-    x = torch.rand((1, 5, c))
-    o = m(x)
-    print(o.shape)
+    v = 3
+    m = TransfomerEncoderDecoderMultiViewHead(c, v, with_positional_encoding=False, learnable_pe=True)
+    m = m.to('cuda:0')
+    bs = 4
+    weight = torch.rand((bs, 1)) * 5
+    #print(weight)
+    #weight = None
+
+    x = torch.rand((bs, v, c))
+    out = m(x.to('cuda:0') )#, weight.to('cuda:0')) #
+    print(out.shape)
 
 
 

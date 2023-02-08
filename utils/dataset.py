@@ -229,6 +229,11 @@ class Dataset(data.Dataset):
                 y = torch.zeros(self.num_classes)
                 uni, c = torch.unique(torch.tensor(ys), return_counts=True)
                 y[uni.long()] = c/torch.sum(c)
+                if self.args.multi_head_classification:
+                    y = {'out': y}
+                    for j, y_ in enumerate(ys):
+                        y[str(j)] = torch.zeros(self.num_classes)
+                        y[str(j)][y_] = 1
             else:
                 y = ys[0]
         else:
