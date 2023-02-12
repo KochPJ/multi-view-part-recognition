@@ -64,6 +64,35 @@ class ColorJitter:
         format_string += ', hue={0})'.format(self.hue)
         return format_string
 
+class RandomNoise:
+    def __init__(self, p=0.05, disable=0.3, const=0.1):
+        self.disable = disable
+        self.p = p
+        self.const = const
+        self.rand = self.disable + (1-self.disable) // 2
+
+    def __call__(self, sample):
+        if 'weight' in sample:
+            r = np.random.rand()
+            if r < self.disable:
+                sample['weight'] = torch.Tensor([0.0])
+            elif r < self.rand:
+                sample['weight'] += (torch.rand([1]) * (self.p * 2)) - self.p
+            else:
+                sample['weight'] += (torch.rand([1]) * (self.const * 2)) - self.const
+            if sample['weight'] < 0:
+                sample['weight'] = torch.Tensor([0.0])
+        return sample
+
+
+    def __repr__(self):
+        format_string = self.__class__.__name__ + '('
+        format_string += 'disable={0}'.format(self.disable)
+        format_string += ', p={0}'.format(self.p)
+        format_string += ', const={0}'.format(self.const)
+        format_string += ', rand={0})'.format(self.rand)
+        return format_string
+
 
 class DepthNoise:
     def __init__(self, max_noise: float = 3.0, to_meter=False, random_offset_range: float = 300,
@@ -227,3 +256,11 @@ class RandomFlip:
         format_string += ', diagonal={0}'.format(self.diagonal)
         format_string += ', uniform={0})'.format(self.uniform)
         return format_string
+
+
+
+if __name__ == '__main__':
+    r = RandomNoise()
+    weight = {'weight': torch.Tensor([1.0])}
+    for _ in range(100):
+        print(r( {'weight': torch.Tensor([1.0])}))

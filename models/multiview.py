@@ -60,6 +60,7 @@ class MultiView(nn.Module):
                 self.allows_weight = True
                 break
 
+
         args = [arg.name for arg in inspect.signature(fusion).parameters.values()]
         arg_dict = {'channels': encoder.out_channels,
                     'num_views': num_views,
@@ -109,7 +110,7 @@ class MultiView(nn.Module):
             x = self.tf(x)
 
         # fuse and classify
-        if self.allows_weight:
+        if weight is not None:
             x = self.multiViewFusion(x, weight)
         else:
             x = self.multiViewFusion(x)
@@ -215,7 +216,7 @@ class MultiViewRGBD(nn.Module):
             x = self.tf(x)
 
         # fuse and classify
-        if self.allows_weight:
+        if weight is not None:
             x = self.multiViewFusion(x, weight)
         else:
             x = self.multiViewFusion(x)

@@ -44,10 +44,11 @@ def get_args_parser():
     parser.add_argument('--roicrop', default=True, type=bool)
     parser.add_argument('--shuf_views', default=False, type=bool)
     parser.add_argument('--shuf_views_cw', default=True, type=bool)
-    parser.add_argument('--shuf_views_cw_disable', default=0.5, type=float)
+    parser.add_argument('--shuf_views_cw_disable', default=0.7, type=float)
+    parser.add_argument('--enable_weight_input', default=-1, type=float)
     parser.add_argument('--shuf_views_vw', default=True, type=bool)
-    parser.add_argument('--p_shuf_cw', default=0.3, type=float)
-    parser.add_argument('--p_shuf_vw', default=0.3, type=float)
+    parser.add_argument('--p_shuf_cw', default=1.0, type=float)
+    parser.add_argument('--p_shuf_vw', default=1.0, type=float)
     parser.add_argument('--data_views', default='1-2-3-4-5-6-7-8-9-10', type=str) #1-6-9
     parser.add_argument('--views', default='1-6-9', type=str) #1-6-9
     parser.add_argument('--random_view_order', default=False, type=bool)
@@ -59,6 +60,10 @@ def get_args_parser():
     parser.add_argument('--show_axis', default=True, type=bool)
     parser.add_argument('--depth_mean', default=897.8720890284345, type=float)
     parser.add_argument('--depth_std', default=859.9051176853665, type=float)
+    parser.add_argument('--depth_mean_hha', default=897.8720890284345, type=float)
+    parser.add_argument('--depth_std_hha', default=859.9051176853665, type=float)
+    parser.add_argument('--norm_depth', default=False, type=bool)
+    parser.add_argument('--depth2hha', default=False, type=bool)
     parser.add_argument('--rotation_aug', default=True, type=bool)
     parser.add_argument('--flip_aug', default=True, type=bool)
     parser.add_argument('--width', default=224, type=int)
@@ -318,6 +323,15 @@ def main(args):
                 for key in dataloader.keys():
                     setattr(dataloader[key].dataset.args, 'shuf_views_cw', True)
 
+        if args.enable_weight_input > 0:
+            if epoch == int(args.epochs * args.enable_weight_input):
+                print('Switching to include weight.')
+                for key in dataloader.keys():
+                    if 'meta' not in dataloader[key].dataset.load_keys:
+                        dataloader[key].dataset.load_keys.append('meta')
+                    if 'weight' not in dataloader[key].dataset.input_keys:
+                        dataloader[key].dataset.input_keys.append('weight')
+
         logs['epoch'] = epoch
         losses = []
         model.train()
@@ -327,6 +341,7 @@ def main(args):
             #    break
             for key in x:
                 x[key] = x[key].to(device)
+
             if isinstance(y, dict):
                 for key in y:
                     y[key] = y[key].to(device)

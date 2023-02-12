@@ -90,11 +90,14 @@ def get_encoder(args):
                     args.depth_fusion, __fusion__.keys()
                 ))
             if args.rgbd_version == 'v1':
-                encoder = ResNetRGBD(args.model_version, out_channels, args.pretrained, fusion=fusion)
+                encoder = ResNetRGBD(args.model_version, out_channels, args.pretrained, fusion=fusion,
+                                     depth_channels=1 if not args.depth2hha else 3)
             elif args.rgbd_version == 'v2':
-                encoder = ResNetRGBDv2(args.model_version, out_channels, args.pretrained, fusion=fusion)
+                encoder = ResNetRGBDv2(args.model_version, out_channels, args.pretrained, fusion=fusion,
+                                     depth_channels=1 if not args.depth2hha else 3)
             elif args.rgbd_version == 'v3':
-                encoder = ResNetRGBDv3(args.model_version, out_channels, args.pretrained, fusion=fusion)
+                encoder = ResNetRGBDv3(args.model_version, out_channels, args.pretrained, fusion=fusion,
+                                     depth_channels=1 if not args.depth2hha else 3)
             else:
                 raise ValueError('version {} for ResNet RGBD ist not Implemented'.format(args.rgbd_version))
 

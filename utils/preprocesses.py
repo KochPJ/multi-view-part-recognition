@@ -4,10 +4,11 @@ from PIL import Image
 import torchvision.transforms.functional as F
 import torch
 import random
+from utils.hha import getHHA
 
 
 class Normalize:
-    def __init__(self, mean=None, std=None, depth_mean=None, depth_std=None):
+    def __init__(self, mean=None, std=None, depth_mean=None, depth_std=None, norm_depth=False):
         if mean is None:
             mean = [0.485, 0.456, 0.406]
         if std is None:
@@ -20,6 +21,7 @@ class Normalize:
             depth_std = None
         self.depth_mean = depth_mean
         self.depth_std = depth_std
+        self.norm_depth = norm_depth
 
     def __call__(self, sample):
         for i in range(sample['x'].shape[0]):
@@ -27,6 +29,8 @@ class Normalize:
 
         if self.depth_mean is not None and self.depth_std is not None and 'depth' in sample:
             for i in range(len(sample['depth'])):
+                if self.norm_depth:
+                    sample['depth'][i] += self.depth_mean - torch.mean(sample['depth'][sample['depth'] > 0])
                 sample['depth'][i] = F.normalize(sample['depth'][i].unsqueeze(0), self.depth_mean, self.depth_std)
             #print(sample['depth'].shape, 'tensor')
         return sample
@@ -39,6 +43,23 @@ class Normalize:
         format_string += ', depth_std={0})'.format(self.depth_std)
         return format_string
 
+
+
+class DepthToHHA(object):
+    def __init__(self):
+        pass
+
+    def __call__(self, sample):
+        if 'depth' in sample and 'intr' in sample:
+            for i, (d, intr) in enumerate(zip(sample['depth'], sample['intr'])):
+                sample['depth'][i] = self.to_hha(d, intr)
+        else:
+            print('missing intr', sample.keys())
+        return sample
+
+    def to_hha(self, d, intr):
+        d = np.array(d)
+        return Image.fromarray(np.array(getHHA(d, d, intr), dtype=np.uint8))
 
 class ToTensor:
     def __call__(self, sample):

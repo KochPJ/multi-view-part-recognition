@@ -7,27 +7,23 @@ import argparse
 
 if __name__ == '__main__':
     views_lut = {
-        '1-a': ['9', '9'],
-        '1-b': ['9', '1-6-9'],
-        '1-c': ['9', '1-2-3-4-5-6-7-8-9-10'],
+        #'1-a': ['9', '9'],
+        #'1-b': ['9', '1-6-9'],
+        #'1-c': ['9', '1-2-3-4-5-6-7-8-9-10'],
         '2': '1-10',
-        '3': ['1-6-9', '1-2-3-4-5-6-7-8-9-10'],#, '1-6-9',
-        #'3-b': '1-6-9',
-        #'3': '1-6-9',
-        '4': ['1-3-8-10', '1-2-3-4-5-6-7-8-9-10'],
+        '3': '1-6-9',
         '4-b': '1-3-8-10',
-        '5': ['1-3-4-7-9', '1-2-3-4-5-6-7-8-9-10'],
         '5-b': '1-3-4-7-9',
-        '6': ['1-3-2-4-7-9', '1-2-3-4-5-6-7-8-9-10'],
         '6-b': '1-3-2-4-7-9',
-        '7': ['1-2-3-4-7-8-10', '1-2-3-4-5-6-7-8-9-10'],
         '7-b': '1-2-3-4-7-8-10',
-        '8': ['1-2-3-4-7-8-9-10', '1-2-3-4-5-6-7-8-9-10'],
         '8-b': '1-2-3-4-7-8-9-10',
-        '9': ['1-3-4-5-6-7-8-9-10', '1-2-3-4-5-6-7-8-9-10'],
         '9-b': '1-3-4-5-6-7-8-9-10',
         '10': '1-2-3-4-5-6-7-8-9-10'
     }
+
+    data_views = ['1-6-9', '1-3-8-10', '1-3-4-7-9', '1-3-2-4-7-9', '1-2-3-4-7-8-10', '1-2-3-4-7-8-9-10',
+                  '1-3-4-5-6-7-8-9-10', '1-2-3-4-5-6-7-8-9-10']
+
     views_lut = {
         '1-a': ['9', '9'],
         '1-b': ['9', '1-6-9'],
@@ -37,7 +33,6 @@ if __name__ == '__main__':
     #views_lut = {
     #    '3': '1-6-9'
     #}
-
     runs = 5
     main_view = '3'
 
@@ -45,18 +40,20 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     add_shuffle_exp = True#True
-    add_fusion_exp = True#True
-    add_encoder_decoder_tf = True#True
-    add_PE_exp = True#True
-    add_roi_crop_exp = True#True
-    add_view_exp = True#True
+    add_fusion_exp = False#True
+    add_encoder_decoder_tf = False#True
+    add_PE_exp = False#True
+    add_weight_exp = True#True
+    add_roi_crop_exp = False#True
+    add_view_exp = False#True
     add_depth_exp = False
     shuffle_all_views_exp = False
-    add_pretrain_exp = True#True
-    add_aug_exps = True#True
+    add_pretrain_exp = False#True
+    add_aug_exps = False#True
     add_rotation_exps = False#True
-    add_random_view_order_exp = True#True
-    add_resize_exp = True#True
+    add_dataviews_exps = False#True
+    add_random_view_order_exp = False#True
+    add_resize_exp = False#True
     add_lr_exp = False
     add_models_exp = False
     execute = True
@@ -70,11 +67,13 @@ if __name__ == '__main__':
     exps = []
     new_res = (512, 512)
 
+
     depth_epoch_multiplier = 1.5
+    num_epoch_multiplier = 1.5
     tf_layers = 1
-    runs = 5
-    run_start = 4 #3
-    start_exp = 6
+    runs = 6
+    run_start = 5 #3
+    start_exp = 0
     for run in range(run_start, runs):
         outdir_ = os.path.join(outdir, 'run{}'.format(str(run).zfill(3)))
         pretrain_path = [[os.path.join(outdir_,
@@ -115,7 +114,11 @@ if __name__ == '__main__':
 
             if nr != main_view:
                 if add_view_exp:
-                    exps.append(copy.deepcopy(a))
+                    b = copy.deepcopy(a)
+                    setattr(b, 'epochs', int(getattr(a, 'epochs') * num_epoch_multiplier))
+                    setattr(b, 'random_view_order', True)
+                    exps.append(b)
+
                 if shuffle_all_views_exp and n != 1:
                     b = copy.deepcopy(a)
                     setattr(b, 'name', '{}_{}'.format(getattr(b, 'name'), 'shuffle'))
@@ -186,8 +189,20 @@ if __name__ == '__main__':
                 if add_rotation_exps:
                     for rot in rots:
                         b = copy.deepcopy(a)
-                        setattr(b, 'name', '{}_{}'.format(getattr(b, 'name'), 'rotation_exp{}'.format(rot)))
+                        setattr(b, 'name', '{}_{}'.format(getattr(b, 'name'), 'rot_exp{}'.format(len(rot.split('-')))))
                         setattr(b, 'rotations', rot)
+                        setattr(b, 'epochs', int(getattr(a, 'epochs') * num_epoch_multiplier))
+                        setattr(b, 'random_view_order', True)
+                        exps.append(copy.deepcopy(b))
+
+                if add_dataviews_exps:
+                    for data_view in data_views:
+                        b = copy.deepcopy(a)
+                        setattr(b, 'name', '{}_{}'.format(getattr(b, 'name'), 'rot_exp{}'.format(
+                            len(data_view.split('-')))))
+                        setattr(b, 'data_views', data_view)
+                        setattr(b, 'epochs', int(getattr(a, 'epochs') * num_epoch_multiplier))
+                        setattr(b, 'random_view_order', True)
                         exps.append(copy.deepcopy(b))
 
                 if add_aug_exps:
@@ -291,6 +306,7 @@ if __name__ == '__main__':
                     setattr(b, 'tf_layers', 1)
                     setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'PE-RV'.format(fusion)))
                     setattr(b, 'multi_head_classification', True)
+                    setattr(b, 'with_positional_encoding', True)
                     setattr(b, 'random_view_order', True)
                     exps.append(copy.deepcopy(b))
                     setattr(b, 'data_views', '1-6-9')
@@ -298,6 +314,7 @@ if __name__ == '__main__':
                     setattr(b, 'tf_layers', 1)
                     setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'PE-SV'.format(fusion)))
                     setattr(b, 'multi_head_classification', True)
+                    setattr(b, 'with_positional_encoding', True)
                     setattr(b, 'random_view_order', False)
                     exps.append(copy.deepcopy(b))
                     setattr(b, 'data_views', '1-2-3-4-5-6-7-8-9-10')
@@ -305,8 +322,33 @@ if __name__ == '__main__':
                     setattr(b, 'tf_layers', 1)
                     setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'PE-RV-all'.format(fusion)))
                     setattr(b, 'multi_head_classification', True)
+                    setattr(b, 'with_positional_encoding', True)
                     setattr(b, 'random_view_order', True)
                     exps.append(copy.deepcopy(b))
+
+                if add_weight_exp:
+                    for fusion in ['TransfomerEncoderDecoderMultiViewHead', 'FC', 'TransformerMultiViewHeadDecoder']:
+                        b = copy.deepcopy(a)
+
+                        setattr(b, 'fusion', fusion)
+                        setattr(b, 'tf_layers', 0)
+                        setattr(b, 'name', '{}_{}_{}'.format(getattr(a, 'name'), 'Weight_EDTF', fusion))
+                        setattr(b, 'multi_head_classification', True)
+                        setattr(b, 'with_positional_encoding', True)
+                        setattr(b, 'learnable_pe', True)
+                        setattr(b, 'random_view_order', True)
+                        setattr(b, 'enable_weight_input', 0.7)
+                        exps.append(copy.deepcopy(b))
+
+                        setattr(b, 'fusion', fusion)
+                        setattr(b, 'tf_layers', 0)
+                        setattr(b, 'name', '{}_{}_{}'.format(getattr(a, 'name'), 'Weight_EDTF_noPE', fusion))
+                        setattr(b, 'multi_head_classification', True)
+                        setattr(b, 'with_positional_encoding', False)
+                        setattr(b, 'learnable_pe', False)
+                        setattr(b, 'random_view_order', True)
+                        setattr(b, 'enable_weight_input', 0.7)
+                        exps.append(copy.deepcopy(b))
 
                 if add_depth_exp:
                     for fusion in ['Squeeze&Excite']: #Conv
@@ -469,14 +511,15 @@ if __name__ == '__main__':
                     for keys in [[], ['shuf_views_cw'], ['shuf_views_vw'], ['shuf_views_cw', 'shuf_views_vw']]:
                         b = copy.deepcopy(a)
                         setattr(b, 'shuf_views', True)
-                        setattr(b, 'name', '{}_{}'.format(getattr(b, 'name'), 'aug_sv'))
+                        setattr(b, 'random_view_order', True)
+                        setattr(b, 'name', '{}_{}'.format(getattr(b, 'name'), 'aug_sv_p1_rv'))
                         for key in keys:
                             setattr(b, key, False)
                             setattr(b, 'name', '{}_{}'.format(getattr(b, 'name'), key))
                         exps.append(copy.deepcopy(b))
 
     arg_keys = ['outdir', 'multi_head_classification', 'rgbd_wise_multi_head', 'tf_layers', 'width', 'height',
-                'name', 'multiview', 'roicrop', 'shuf_views', 'shuf_views_cw', 'shuf_views_vw', 'fusion',
+                'name', 'shuf_views_cw_disable', 'multiview', 'roicrop', 'shuf_views', 'shuf_views_cw', 'shuf_views_vw', 'fusion',
                 'depth_fusion',
                 'input_keys',
                 'load_keys',
