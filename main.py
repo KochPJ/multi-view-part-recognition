@@ -570,7 +570,6 @@ def main(args):
     logs['loss_test'] = float(np.mean(losses))
     print('Test loss: {}'.format(logs['loss_test']))
 
-    # save the current checkpoint and also if it is the best at the valid AUC or loss
     with open(logs_dir, 'w') as f:
         json.dump(logs, f)
 

@@ -65,7 +65,7 @@ class ColorJitter:
         return format_string
 
 class RandomNoise:
-    def __init__(self, p=0.05, disable=0.3, const=0.1):
+    def __init__(self, p=0.01, disable=0.05, const=0.050):
         self.disable = disable
         self.p = p
         self.const = const

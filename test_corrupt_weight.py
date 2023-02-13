@@ -17,12 +17,12 @@ def get_args_parser():
     parser = argparse.ArgumentParser('Set MultiView', add_help=False)
 
     # training
-    parser.add_argument('--name', default='ResNet_34_nr3_1_6_9-res512-ms', type=str)
-    parser.add_argument('--outdir', default='./results', type=str)
+    parser.add_argument('--name', default='ResNet_50_nr3_1-6-9_Weight_EDTF_TransfomerEncoderDecoderMultiViewHead', type=str)
+    parser.add_argument('--outdir', default='./results/run005', type=str)
     parser.add_argument('--epochs', default=100, type=int) #100
     parser.add_argument('--start_epoch', default=0, type=int)
-    parser.add_argument('--batch_size', default=32, type=int) #32
-    parser.add_argument('--num_workers', default=34, type=int) #34
+    parser.add_argument('--batch_size', default=1, type=int) #32
+    parser.add_argument('--num_workers', default=2, type=int) #34
     parser.add_argument('--device', default='cuda:0', type=str)
     parser.add_argument('--multi_gpu', default=True, type=bool)
 
@@ -109,14 +109,16 @@ def main(args):
         os.makedirs(args.outdir)
 
     best_dir = os.path.join(args.outdir, '{}_best.ckpt'.format(args.name))
-    logs_dir = os.path.join(args.outdir, '{}_test_logs.log'.format(args.name))
+    logs_dir = os.path.join(args.outdir, '{}_test_rw_logs.log'.format(args.name))
+    ignore_keys = ['batch_size', 'num_workers']
     if os.path.exists(best_dir):
         cp = torch.load(best_dir)
-        print('loaded current checkpoint from {}'.format(best_dir))
-        for key, arg in cp['logs']['args']:
-            if getattr(args, key) != arg:
+
+        print('loaded best checkpoint from {}'.format(best_dir))
+        for key, arg in cp['logs']['args'].items():
+            if getattr(args, key) != arg and key not in ignore_keys:
                 print('set {}: {} -> {}'.format(key, getattr(args, key), arg))
-            setattr(args, key, arg)
+                setattr(args, key, arg)
     else:
         cp = None
 
@@ -130,33 +132,30 @@ def main(args):
         args.p_shuf_vw = float(1 / len(args.views.split('-')))
         print('Shuffle view wise with p={}'.format(args.p_shuf_vw))
 
-    modes = ['train', 'valid', 'test']
-    classes = sorted(list(ds['train'].keys()))
-    datasets = {mode: Dataset(args, ds[mode], ds['meta'], mode=mode, classes=classes) for mode in modes}
-    args.num_classes = datasets['train'].num_classes
+    classes = sorted(list(ds['test'].keys()))
+    dataset = Dataset(args, ds['test'], ds['meta'], mode='test', classes=classes)
+    args.num_classes = dataset.num_classes
     print('number of classes: {}'.format(args.num_classes))
 
+    if 'meta' not in dataset.load_keys:
+        dataset.load_keys.append('meta')
+    if 'weight' not in dataset.input_keys:
+        dataset.input_keys.append('weight')
 
-    dataloader = {mode: torch.utils.data.DataLoader(dataset=datasets[mode],
-                                                    batch_size=1,
-                                                    shuffle=True if mode == 'train' else False,
-                                                    num_workers=args.num_workers,
-                                                    drop_last=False) for mode in modes}
+    dataloader = torch.utils.data.DataLoader(dataset=dataset,
+                                             batch_size=1,
+                                             shuffle=False,
+                                             num_workers=args.num_workers,
+                                             drop_last=False)
 
     print('##############')
     steps = {'epochs': args.epochs}
-    for mode in modes:
-        print('------ {} ------'.format(mode))
-        print('     classes: {}'.format(len(ds[mode])))
-        print('     samples: {}'.format(sum([len(ds[mode][cls]) for cls in ds[mode]])))
-        print('     dataset len: {}'.format(len(datasets[mode])))
-        print('     dataloader len: {}'.format(len(dataloader[mode])))
-        steps[mode] = len(dataloader[mode])
-
-        #if mode in ['valid', 'test']:
-        #    for cls in ds[mode]:
-        #        if len(ds[mode][cls]) != 5:
-        #            print(mode, cls, len(ds[mode][cls]))
+    mode = 'test'
+    print('------ {} ------'.format('test'))
+    print('     classes: {}'.format(len(ds)))
+    print('     samples: {}'.format(sum([len(ds[cls]) for cls in ds])))
+    print('     dataset len: {}'.format(len(dataset)))
+    print('     dataloader len: {}'.format(len(dataloader)))
 
     if not args.shuf_views_cw and args.shuf_views:
         print('Using BCEWithLogitsLoss')
@@ -171,7 +170,7 @@ def main(args):
     device = torch.device(args.device)
     model = get_model(args)
     if cp is not None:
-        print('loading current model state dict from {}'.format(current_dir))
+        print('loading best model state dict from {}'.format(best_dir))
         model.load_state_dict(cp['state_dict'])
 
     if args.multi_gpu and torch.cuda.device_count() > 1 and args.device != 'cpu':
@@ -179,86 +178,97 @@ def main(args):
     model = model.to(device)
 
     metrics = {k: TopKAccuracy(int(k)) for k in args.topk.split('-')}
-    metrics_cls = {cls: metrics for cls in classes}
+    metrics_cls = {cls: copy.deepcopy(metrics) for cls in classes}
 
     bestk = sorted(list(args.topk.split('-')))[0]
     del cp
 
+    all_logs = {}
 
-    logs = {
-        'acc_test': None,
-        'topk_test': {k: None for k in args.topk.split('-')},
-        'args': vars(args),
-        'topk_cls_test': {cls: {k: None for k in args.topk.split('-')} for cls in classes}
-    }
+    weight_errors = [None, 0.0, 0.10, 0.025, 0.05, 0.075, 0.15, 0.20]
+    for weight_error in weight_errors:
 
-    print('##### Run Test #####')
-    model.eval()
-    losses = []
-    t_step = time.time()
+        logs = {
+            'acc_test': None,
+            'topk_test': {k: None for k in args.topk.split('-')},
+            'args': vars(args),
+            'topk_cls_test': {cls: {k: None for k in args.topk.split('-')} for cls in classes}
+        }
 
-    for cls in metrics_cls.keys():
-        for k in metrics_cls[cls].keys():
-            metrics_cls[cls][k].reset()
-    for k in metrics.keys():
-        metrics[k].reset()
+        print('##### Run Test corrupted weight {} #####'.format(weight_error))
+        model.eval()
+        losses = []
+        t_step = time.time()
 
-    for step, (x, y) in enumerate(dataloader['test']):
-        #if step == 4:
-        #    break
-        cls = classes[int(y[0])]
-        for key in x:
-            if key == 'depth':
-                x[key] = (torch.rand(x[key].shape)-0.5)
-            x[key] = x[key].to(device)
+        for cls in metrics_cls.keys():
+            for k in metrics_cls[cls].keys():
+                metrics_cls[cls][k].reset()
+        for k in metrics.keys():
+            metrics[k].reset()
 
-        if isinstance(y, dict):
-            for key in y:
-                y[key] = y[key].to(device)
-        else:
-            y = y.to(device)
+        for step, (x, y) in enumerate(dataloader):
+            #if step == 4:
+            #    break
+            cls = classes[int(y[0])]
+            for key in x:
+                if key == 'weight':
+                    if weight_error is None:
+                        x[key] = None
+                        continue
+                    elif step%2 == 0:
+                        x[key] = x[key] * (torch.Tensor([1])-weight_error)
+                    else:
+                        x[key] = x[key] * (torch.Tensor([1])+weight_error)
+                x[key] = x[key].to(device)
 
-        with torch.no_grad():
-            pred = model(**x)
-
-        if isinstance(pred, dict):
-            if binary_cross:
-                bi_c_loss = []
-                for bi_key, bi_pred in pred.items():
-                    for bi_y in y.keys():
-                        if bi_y in bi_key:
-                            bi_c_loss.append(criterion(bi_pred, y[bi_y]))
-                            break
-                loss = sum(bi_c_loss) / len(bi_c_loss)
-                y = y['out']
+            if isinstance(y, dict):
+                for key in y:
+                    y[key] = y[key].to(device)
             else:
-                loss = sum([criterion(pred_, y) for pred_ in pred.values()]) / len(pred)
-            pred = pred['out']
-        else:
-            loss = criterion(pred, y)
+                y = y.to(device)
 
-        losses.append(float(loss.item()))
+            with torch.no_grad():
+                pred = model(**x)
 
-        for m in metrics.values():
-            m.add(pred, y)
-        for m in metrics_cls[cls].values():
-            m.add(pred, y)
+            if isinstance(pred, dict):
+                if binary_cross:
+                    bi_c_loss = []
+                    for bi_key, bi_pred in pred.items():
+                        for bi_y in y.keys():
+                            if bi_y in bi_key:
+                                bi_c_loss.append(criterion(bi_pred, y[bi_y]))
+                                break
+                    loss = sum(bi_c_loss) / len(bi_c_loss)
+                    y = y['out']
+                else:
+                    loss = sum([criterion(pred_, y) for pred_ in pred.values()]) / len(pred)
+                pred = pred['out']
+            else:
+                loss = criterion(pred, y)
 
-    print('##### Test Results ######')
-    for k, m in metrics.items():
-        logs['topk_test'][k] = m.result()
-        print('Test top {}: {}%'.format(k, float(np.round(logs['topk_test'][k], 3))))
-    for cls, met in metrics_cls.items():
-        for k, m in met.items():
-            logs['topk_cls_test'][cls][k] = m.result
+            losses.append(float(loss.item()))
 
-    logs['acc_test'] = metrics[bestk].result()
-    logs['loss_test'] = float(np.mean(losses))
-    print('Test loss: {}'.format(logs['loss_test']))
+            for m in metrics.values():
+                m.add(pred, y)
+            for m in metrics_cls[cls].values():
+                m.add(pred, y)
 
-    # save the current checkpoint and also if it is the best at the valid AUC or loss
+        print('##### Test Results ######')
+        for k, m in metrics.items():
+            logs['topk_test'][k] = m.result()
+            print('Test top {}: {}%'.format(k, float(np.round(logs['topk_test'][k], 3))))
+        for cls, met in metrics_cls.items():
+            for k, m in met.items():
+                logs['topk_cls_test'][cls][k] = m.result()
+
+        logs['acc_test'] = metrics[bestk].result()
+        logs['loss_test'] = float(np.mean(losses))
+        print('Test loss: {}'.format(logs['loss_test']))
+        all_logs[str(weight_error)] = logs
+
+
     with open(logs_dir, 'w') as f:
-        json.dump(logs, f)
+        json.dump(all_logs, f)
 
 
 if __name__ == '__main__':

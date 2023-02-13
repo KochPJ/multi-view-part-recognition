@@ -243,29 +243,6 @@ class FeedForward(nn.Module):
         return self.net(x)
 
 
-class PreNorm(nn.Module):
-    def __init__(self, dim, fn):
-        super().__init__()
-        self.norm = nn.LayerNorm(dim)
-        self.fn = fn
-    def forward(self, x, **kwargs):
-        return self.fn(self.norm(x), **kwargs)
-
-
-class FeedForward(nn.Module):
-    def __init__(self, dim, hidden_dim, dropout = 0.):
-        super().__init__()
-        self.net = nn.Sequential(
-            nn.Linear(dim, hidden_dim),
-            nn.GELU(),
-            nn.Dropout(dropout),
-            nn.Linear(hidden_dim, dim),
-            nn.Dropout(dropout)
-        )
-    def forward(self, x):
-        return self.net(x)
-
-
 class Attention(nn.Module):
     def __init__(self, dim, heads=8, dim_head=64, dropout=0.):
         super().__init__()
@@ -449,7 +426,7 @@ class TransfomerEncoderDecoderMultiViewHead(nn.Module):
         out, _ = self.tf(x, None, query, pos_embed)
         return out.squeeze(1)
 
-def get_pos_embed(x, num_pos_feats=64, temperature=2000, scale=100*math.pi):
+def get_pos_embed(x, num_pos_feats=64, temperature=2000, scale=200*math.pi):
     if scale is None:
         scale = 2 * math.pi
         x = x * scale

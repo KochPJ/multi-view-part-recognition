@@ -25,22 +25,16 @@ if __name__ == '__main__':
                   '1-3-4-5-6-7-8-9-10', '1-2-3-4-5-6-7-8-9-10']
 
     views_lut = {
-        '1-a': ['9', '9'],
-        '1-b': ['9', '1-6-9'],
-        '1-c': ['9', '1-2-3-4-5-6-7-8-9-10'],
-        '3': '1-6-9',
+        '3': '1-6-9'
     }
-    #views_lut = {
-    #    '3': '1-6-9'
-    #}
     runs = 5
     main_view = '3'
 
     parser = argparse.ArgumentParser('MultiView training script', parents=[get_args_parser()])
     args = parser.parse_args()
 
-    add_shuffle_exp = True#True
-    add_fusion_exp = False#True
+    add_shuffle_exp = False#True
+    add_fusion_exp = True#True
     add_encoder_decoder_tf = False#True
     add_PE_exp = False#True
     add_weight_exp = True#True
@@ -71,8 +65,8 @@ if __name__ == '__main__':
     depth_epoch_multiplier = 1.5
     num_epoch_multiplier = 1.5
     tf_layers = 1
-    runs = 6
-    run_start = 5 #3
+    runs = 11
+    run_start = 6 #3
     start_exp = 0
     for run in range(run_start, runs):
         outdir_ = os.path.join(outdir, 'run{}'.format(str(run).zfill(3)))
@@ -223,7 +217,7 @@ if __name__ == '__main__':
                     exps.append(b)
 
                 if add_fusion_exp:
-                    for fusion in ['Conv']: #, 'Conv','FC', 'max-pool', 'mean', 'Squeeze&Excite', 'SharedSqueeze&Excite'
+                    for fusion in ['Conv', 'max-pool']: #, 'Conv','FC', 'max-pool', 'mean', 'Squeeze&Excite', 'SharedSqueeze&Excite'
                         b = copy.deepcopy(a)
                         setattr(b, 'data_views', '1-2-3-4-5-6-7-8-9-10')
                         setattr(b, 'fusion', fusion)
@@ -239,10 +233,10 @@ if __name__ == '__main__':
                         #setattr(b, 'multi_head_classification', True)
                         #setattr(b, 'tf_layers', tf_layers*2)
                         #exps.append(copy.deepcopy(b))
-                        #setattr(b, 'tf_layers', 0)
-                        #setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'fuse_{}_no_TrFo'.format(fusion)))
-                        #setattr(b, 'multi_head_classification', False)
-                        #exps.append(copy.deepcopy(b))
+                        setattr(b, 'tf_layers', 0)
+                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'fuse_{}_no_TrFo'.format(fusion)))
+                        setattr(b, 'multi_head_classification', False)
+                        exps.append(copy.deepcopy(b))
                         setattr(b, 'tf_layers', 0)
                         setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'fuse_{}_no_TrFo-multihead'.format(fusion)))
                         setattr(b, 'multi_head_classification', True)
@@ -326,29 +320,38 @@ if __name__ == '__main__':
                     setattr(b, 'random_view_order', True)
                     exps.append(copy.deepcopy(b))
 
-                if add_weight_exp:
-                    for fusion in ['TransfomerEncoderDecoderMultiViewHead', 'FC', 'TransformerMultiViewHeadDecoder']:
+                if add_weight_exp and run == run_start:
+                    for fusion in ['TransfomerEncoderDecoderMultiViewHead']:
                         b = copy.deepcopy(a)
 
                         setattr(b, 'fusion', fusion)
                         setattr(b, 'tf_layers', 0)
-                        setattr(b, 'name', '{}_{}_{}'.format(getattr(a, 'name'), 'Weight_EDTF', fusion))
+                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'Weight_EDTF02'))
                         setattr(b, 'multi_head_classification', True)
                         setattr(b, 'with_positional_encoding', True)
                         setattr(b, 'learnable_pe', True)
                         setattr(b, 'random_view_order', True)
-                        setattr(b, 'enable_weight_input', 0.7)
+                        setattr(b, 'enable_weight_input', 0.2)
                         exps.append(copy.deepcopy(b))
-
                         setattr(b, 'fusion', fusion)
                         setattr(b, 'tf_layers', 0)
-                        setattr(b, 'name', '{}_{}_{}'.format(getattr(a, 'name'), 'Weight_EDTF_noPE', fusion))
+                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'Weight_EDTF00'))
                         setattr(b, 'multi_head_classification', True)
-                        setattr(b, 'with_positional_encoding', False)
-                        setattr(b, 'learnable_pe', False)
+                        setattr(b, 'with_positional_encoding', True)
+                        setattr(b, 'learnable_pe', True)
                         setattr(b, 'random_view_order', True)
-                        setattr(b, 'enable_weight_input', 0.7)
+                        setattr(b, 'enable_weight_input', 0.0)
                         exps.append(copy.deepcopy(b))
+
+                        #setattr(b, 'fusion', fusion)
+                        #setattr(b, 'tf_layers', 0)
+                        #setattr(b, 'name', '{}_{}_{}'.format(getattr(a, 'name'), 'Weight_EDTF_noPE', fusion))
+                        #setattr(b, 'multi_head_classification', True)
+                        #setattr(b, 'with_positional_encoding', False)
+                        #setattr(b, 'learnable_pe', False)
+                        #setattr(b, 'random_view_order', True)
+                        #setattr(b, 'enable_weight_input', 0.2)
+                        #exps.append(copy.deepcopy(b))
 
                 if add_depth_exp:
                     for fusion in ['Squeeze&Excite']: #Conv

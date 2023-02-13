@@ -284,6 +284,9 @@ def _get_activation_fn(activation):
     raise RuntimeError(F"activation should be relu/gelu, not {activation}.")
 
 
+
+
+
 if __name__ == '__main__':
     layers = 2
     d = 512
@@ -301,3 +304,5 @@ if __name__ == '__main__':
 
     out, memory = tf(src, mask, query_embed, pos_embed)
     print(out.shape, memory.shape)
+
+

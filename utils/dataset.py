@@ -6,7 +6,7 @@ import torch.utils.data as data
 import os
 from PIL import Image
 import torch
-from utils.preprocesses import ToTensor, Pad, Resize, RoiCrop, Normalize, DepthToHHA
+from utils.preprocesses import ToTensor, Pad, Resize, RoiCrop, Normalize
 from utils.augmentations import RandomRotation, RandomFlip, ColorJitter, DepthNoise, RandomNoise
 import numpy as np
 import torchvision.transforms as transforms

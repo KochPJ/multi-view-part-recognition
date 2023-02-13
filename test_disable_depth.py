@@ -109,14 +109,16 @@ def main(args):
         os.makedirs(args.outdir)
 
     best_dir = os.path.join(args.outdir, '{}_best.ckpt'.format(args.name))
-    logs_dir = os.path.join(args.outdir, '{}_test_logs.log'.format(args.name))
+    logs_dir = os.path.join(args.outdir, '{}_test_dd_logs.log'.format(args.name))
+
+    ignore_keys = ['batch_size', 'num_workers']
     if os.path.exists(best_dir):
         cp = torch.load(best_dir)
-        print('loaded current checkpoint from {}'.format(best_dir))
+        print('loaded best checkpoint from {}'.format(best_dir))
         for key, arg in cp['logs']['args']:
-            if getattr(args, key) != arg:
+            if getattr(args, key) != arg if key not in ignore_keys:
                 print('set {}: {} -> {}'.format(key, getattr(args, key), arg))
-            setattr(args, key, arg)
+                setattr(args, key, arg)
     else:
         cp = None
 
@@ -130,33 +132,25 @@ def main(args):
         args.p_shuf_vw = float(1 / len(args.views.split('-')))
         print('Shuffle view wise with p={}'.format(args.p_shuf_vw))
 
-    modes = ['train', 'valid', 'test']
-    classes = sorted(list(ds['train'].keys()))
-    datasets = {mode: Dataset(args, ds[mode], ds['meta'], mode=mode, classes=classes) for mode in modes}
-    args.num_classes = datasets['train'].num_classes
+    classes = sorted(list(ds['test'].keys()))
+    dataset = Dataset(args, ds['test'], ds['meta'], mode=mode, classes=classes)
+    args.num_classes = dataset['test'].num_classes
     print('number of classes: {}'.format(args.num_classes))
 
-
-    dataloader = {mode: torch.utils.data.DataLoader(dataset=datasets[mode],
+    dataloader = torch.utils.data.DataLoader(dataset=dataset,
                                                     batch_size=1,
-                                                    shuffle=True if mode == 'train' else False,
+                                                    shuffle=False,
                                                     num_workers=args.num_workers,
                                                     drop_last=False) for mode in modes}
 
     print('##############')
-    steps = {'epochs': args.epochs}
-    for mode in modes:
-        print('------ {} ------'.format(mode))
-        print('     classes: {}'.format(len(ds[mode])))
-        print('     samples: {}'.format(sum([len(ds[mode][cls]) for cls in ds[mode]])))
-        print('     dataset len: {}'.format(len(datasets[mode])))
-        print('     dataloader len: {}'.format(len(dataloader[mode])))
-        steps[mode] = len(dataloader[mode])
+    mode = 'test'
+    print('------ {} ------'.format(mode))
+    print('     classes: {}'.format(len(ds[mode])))
+    print('     samples: {}'.format(sum([len(ds[mode][cls]) for cls in ds[mode]])))
+    print('     dataset len: {}'.format(len(dataset)))
+    print('     dataloader len: {}'.format(len(dataloader)))
 
-        #if mode in ['valid', 'test']:
-        #    for cls in ds[mode]:
-        #        if len(ds[mode][cls]) != 5:
-        #            print(mode, cls, len(ds[mode][cls]))
 
     if not args.shuf_views_cw and args.shuf_views:
         print('Using BCEWithLogitsLoss')
@@ -171,7 +165,7 @@ def main(args):
     device = torch.device(args.device)
     model = get_model(args)
     if cp is not None:
-        print('loading current model state dict from {}'.format(current_dir))
+        print('loading best model state dict from {}'.format(best_dir))
         model.load_state_dict(cp['state_dict'])
 
     if args.multi_gpu and torch.cuda.device_count() > 1 and args.device != 'cpu':
@@ -179,7 +173,7 @@ def main(args):
     model = model.to(device)
 
     metrics = {k: TopKAccuracy(int(k)) for k in args.topk.split('-')}
-    metrics_cls = {cls: metrics for cls in classes}
+    metrics_cls = {cls: copy.deepcopy(metrics) for cls in classes}
 
     bestk = sorted(list(args.topk.split('-')))[0]
     del cp
@@ -197,17 +191,14 @@ def main(args):
     losses = []
     t_step = time.time()
 
-    for cls in metrics_cls.keys():
-        for k in metrics_cls[cls].keys():
-            metrics_cls[cls][k].reset()
-    for k in metrics.keys():
-        metrics[k].reset()
 
-    for step, (x, y) in enumerate(dataloader['test']):
+    for step, (x, y) in enumerate(dataloader):
         #if step == 4:
         #    break
         cls = classes[int(y[0])]
         for key in x:
+            if key == 'depth':
+                x[key] = (torch.rand(x[key].shape)-0.5)
             x[key] = x[key].to(device)
 
         if isinstance(y, dict):
@@ -248,13 +239,12 @@ def main(args):
         print('Test top {}: {}%'.format(k, float(np.round(logs['topk_test'][k], 3))))
     for cls, met in metrics_cls.items():
         for k, m in met.items():
-            logs['topk_cls_test'][cls][k] = m.result
+            logs['topk_cls_test'][cls][k] = m.result()
 
     logs['acc_test'] = metrics[bestk].result()
     logs['loss_test'] = float(np.mean(losses))
     print('Test loss: {}'.format(logs['loss_test']))
 
-    # save the current checkpoint and also if it is the best at the valid AUC or loss
     with open(logs_dir, 'w') as f:
         json.dump(logs, f)
 
