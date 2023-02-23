@@ -465,7 +465,8 @@ class TransfomerEncoderDecoderMultiViewHead(nn.Module):
             sd = torch.load(weightet_path, map_location='cpu')['state_dict']
             #print(sd.keys())
 
-            self.weightNet = WeightNet(0, channels, with_fc=False)
+            self.weightNet = WeightNet(0, channels, with_fc=False, pc_scale=self.pc_scale, pc_temp=self.pc_temp,
+                                       pc_embed_channels=self.pc_embed_channels)
             self.weightNet = load_fitting_state_dict(self.weightNet, sd)
 
             if self.freeze_weightnet:
