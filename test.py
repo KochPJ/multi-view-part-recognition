@@ -10,9 +10,10 @@ import torch.nn as nn
 from models.multiview import get_model
 import torch.optim.lr_scheduler as schedulers
 from utils.metric import TopKAccuracy
-from utils.stuff import bar_progress, lookup
+from utils.stuff import bar_progress, lookup, load_fitting_state_dict
 import time
 import random
+
 
 
 def get_args_parser():
@@ -168,7 +169,8 @@ def main(args):
     model = get_model(args)
     if cp is not None:
         print('loading best model state dict from {}'.format(best_dir))
-        model.load_state_dict(cp['state_dict'])
+        #model.load_state_dict(cp['state_dict'])
+        model = load_fitting_state_dict(model, cp['state_dict'])
 
     if args.multi_gpu and torch.cuda.device_count() > 1 and args.device != 'cpu':
         model = nn.DataParallel(model)

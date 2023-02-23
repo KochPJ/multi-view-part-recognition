@@ -22,15 +22,23 @@ class Normalize:
         self.depth_mean = depth_mean
         self.depth_std = depth_std
         self.norm_depth = norm_depth
+        self.depth_mean_jitter = 0.2
 
     def __call__(self, sample):
-        for i in range(sample['x'].shape[0]):
-            sample['x'][i] = F.normalize(sample['x'][i], self.mean, self.std)
+        if 'x' in sample:
+            for i in range(sample['x'].shape[0]):
+                sample['x'][i] = F.normalize(sample['x'][i], self.mean, self.std)
 
         if self.depth_mean is not None and self.depth_std is not None and 'depth' in sample:
             for i in range(len(sample['depth'])):
                 if self.norm_depth:
-                    sample['depth'][i] += self.depth_mean - torch.mean(sample['depth'][sample['depth'] > 0])
+                    if sample.get('mode', '') == 'train':
+                        depth_mean = self.depth_mean + \
+                                     float((np.random.rand()-0.5) * 2 * self.depth_mean_jitter) * self.depth_mean
+                    else:
+                        depth_mean = self.depth_mean
+                    mask = sample['depth'][i] > 0
+                    sample['depth'][i][mask] += depth_mean - torch.mean(sample['depth'][i][mask])
                 sample['depth'][i] = F.normalize(sample['depth'][i].unsqueeze(0), self.depth_mean, self.depth_std)
             #print(sample['depth'].shape, 'tensor')
         return sample
@@ -62,12 +70,18 @@ class DepthToHHA(object):
         return Image.fromarray(np.array(getHHA(d, d, intr), dtype=np.uint8))
 
 class ToTensor:
+    def __init__(self, dpeth2hha=False):
+        self.dpeth2hha = dpeth2hha
     def __call__(self, sample):
-
-        sample['x'] = torch.cat([F.to_tensor(x).unsqueeze(0) for x in sample['x']])
+        if 'x' in sample:
+            sample['x'] = torch.cat([F.to_tensor(x).unsqueeze(0) for x in sample['x']])
         if 'depth' in sample:
             sample['depth'] = torch.cat([torch.as_tensor(np.array(x), dtype=torch.float32).unsqueeze(0)
-                                         for x in sample['depth']]).unsqueeze(1)
+                                         for x in sample['depth']])
+            if self.dpeth2hha:
+                sample['depth'] = sample['depth'].permute(0,3,1,2)
+            else:
+                sample['depth'] = sample['depth'].unsqueeze(1)
             #print(sample['depth'].shape, 'tensor')
         return sample
 
@@ -79,7 +93,7 @@ class RoiCrop:
     def __init__(self, roi_inflation: float = 0.1,
                  train_random_zoom_max: float = 0.1, train_random_zoom_min: float = -0.1, zoom_mean: float = 0.0,
                  train_center_jitter: bool = True, train_no_crop: float = 0.0, zoom_std: float = 0.33,
-                 p_min: float = 0.1, distribution: str = 'uni'):
+                 p_min: float = 0.1, distribution: str = 'uni', updsampling_threshold: float = -1):
 
         self.roi_inflation = roi_inflation + 1
         self.zoom_min = train_random_zoom_min
@@ -94,6 +108,7 @@ class RoiCrop:
 
         self.center_jitter = train_center_jitter
         self.train_no_crop = train_no_crop
+        self.updsampling_threshold = updsampling_threshold
 
     def get_normal_zoom(self):
         a = np.random.normal(0, self.zoom_std)
@@ -161,10 +176,16 @@ class RoiCrop:
                             cx += center_offset_x
                             cy += center_offset_y
 
+                    if m < self.updsampling_threshold:
+                        #print(m, self.updsampling_threshold)
+                        m = self.updsampling_threshold
+
                     m = int(m // 2)
                     crop = (cx - m, cy - m, cx + m, cy + m)
-                    sample['x'][i] = sample['x'][i].crop(crop)
-                    sample['mask'][i] = sample['mask'][i].crop(crop)
+                    if 'x' in sample:
+                        sample['x'][i] = sample['x'][i].crop(crop)
+                    if 'mask' in sample:
+                        sample['mask'][i] = sample['mask'][i].crop(crop)
                     if 'depth' in sample:
                         sample['depth'][i] = sample['depth'][i].crop(crop)
         return sample
@@ -247,6 +268,11 @@ class Resize:
             self.img_scale = (self.width, self.height)
 
     def __call__(self, sample):
+        key = 'x' if 'x' in sample else 'depth'
+        if key == 'depth':
+            if 'depth' not in sample:
+                return sample
+
         if self.scale_range is not None:
             if sample.get('mode') == 'train':
                 if sample.get('checking_batch_size'):
@@ -265,8 +291,9 @@ class Resize:
         size = sample.get('resize_size', self.img_scale) # (self.width, self.height)
 
         if self.keep_ratio:
-            for i in range(len(sample['x'])):
-                sample['x'][i] = resize_keep_ratio(sample['x'][i], size[0], size[1], self.fill, self.padding_mode)
+            for i in range(len(sample[key])):
+                if 'x' in sample:
+                    sample['x'][i] = resize_keep_ratio(sample['x'][i], size[0], size[1], self.fill, self.padding_mode)
 
                 if 'depth' in sample:
                     sample['depth'][i] = resize_keep_ratio(sample['depth'][i],
@@ -277,8 +304,9 @@ class Resize:
                                                            size[0], size[1], self.fill, self.padding_mode,
                                                            interpolation=Image.NEAREST)
         else:
-            for i in range(len(sample['x'])):
-                sample['x'][i] = sample['x'][i].resize(size=size)
+            for i in range(len(sample[key])):
+                if 'x' in sample:
+                    sample['x'][i] = sample['x'][i].resize(size=size)
                 if 'depth' in sample:
                     sample['depth'][i] = sample['depth'][i].resize(size=size, resample=Image.NEAREST)
                 if 'mask' in sample:

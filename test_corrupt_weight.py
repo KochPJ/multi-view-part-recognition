@@ -8,17 +8,18 @@ import torch.nn as nn
 from models.multiview import get_model
 import torch.optim.lr_scheduler as schedulers
 from utils.metric import TopKAccuracy
-from utils.stuff import bar_progress, lookup
+from utils.stuff import bar_progress, lookup, load_fitting_state_dict
 import time
 import random
+import copy
 
 
 def get_args_parser():
     parser = argparse.ArgumentParser('Set MultiView', add_help=False)
 
     # training
-    parser.add_argument('--name', default='ResNet_50_nr3_1-6-9_Weight_EDTF_TransfomerEncoderDecoderMultiViewHead', type=str)
-    parser.add_argument('--outdir', default='./results/run005', type=str)
+    parser.add_argument('--name', default='ResNet_50_nr3_1-6-9_Weight_EDTF02', type=str)
+    parser.add_argument('--outdir', default='./results/run006', type=str)
     parser.add_argument('--epochs', default=100, type=int) #100
     parser.add_argument('--start_epoch', default=0, type=int)
     parser.add_argument('--batch_size', default=1, type=int) #32
@@ -171,7 +172,8 @@ def main(args):
     model = get_model(args)
     if cp is not None:
         print('loading best model state dict from {}'.format(best_dir))
-        model.load_state_dict(cp['state_dict'])
+        #model.load_state_dict(cp['state_dict'])
+        model = load_fitting_state_dict(model, cp['state_dict'])
 
     if args.multi_gpu and torch.cuda.device_count() > 1 and args.device != 'cpu':
         model = nn.DataParallel(model)

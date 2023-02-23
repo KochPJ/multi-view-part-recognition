@@ -1,12 +1,13 @@
 import os.path
-
 import torch.nn as nn
 import torchvision.models as models
-#from torchvision.models.resnet import ResNet as resnet
+from utils.stuff import load_fitting_state_dict
 import models.fusion as dfusion
 import torch
 import inspect
 import os
+import math
+
 
 __resnets__ = {
     '18': models.resnet18,
@@ -65,9 +66,11 @@ def load_encoder_weights(args, encoder):
     if args.encoder_path:
         if os.path.exists(args.encoder_path):
             weights = torch.load(args.encoder_path)['state_dict']
-            del weights['arch.fc.weight']
-            del weights['arch.fc.bias']
-            encoder.load_state_dict(weights, strict=False)
+
+            encoder = load_fitting_state_dict(encoder, weights)
+            #del weights['arch.fc.weight']
+            #del weights['arch.fc.bias']
+            #encoder.load_state_dict(weights, strict=False)
             print('pre trained weights loaded from {}'.format(args.encoder_path))
         else:
             print('pre trained weights: {} do not exist'.format(args.encoder_path))
@@ -89,22 +92,31 @@ def get_encoder(args):
                 raise ValueError('Depth fusion {} does not exist. {} are implemented'.format(
                     args.depth_fusion, __fusion__.keys()
                 ))
-            if args.rgbd_version == 'v1':
+            if 'x' not in args.input_keys:
+                encoder = ResNetDepth(args.model_version, out_channels, False,
+                                      depth_channels=1 if not args.depth2hha else 3)
+            elif args.rgbd_version == 'v1':
                 encoder = ResNetRGBD(args.model_version, out_channels, args.pretrained, fusion=fusion,
-                                     depth_channels=1 if not args.depth2hha else 3)
+                                     depth_channels=1 if not args.depth2hha else 3, fuse_layers=args.fuse_layers)
             elif args.rgbd_version == 'v2':
                 encoder = ResNetRGBDv2(args.model_version, out_channels, args.pretrained, fusion=fusion,
-                                     depth_channels=1 if not args.depth2hha else 3)
+                                     depth_channels=1 if not args.depth2hha else 3, fuse_layers=args.fuse_layers)
             elif args.rgbd_version == 'v3':
                 encoder = ResNetRGBDv3(args.model_version, out_channels, args.pretrained, fusion=fusion,
-                                     depth_channels=1 if not args.depth2hha else 3)
+                                     depth_channels=1 if not args.depth2hha else 3, fuse_layers=args.fuse_layers)
             else:
                 raise ValueError('version {} for ResNet RGBD ist not Implemented'.format(args.rgbd_version))
 
             if args.with_rednet_pretrained:
                 encoder = load_red_net_pretrained(args.rednet_pretrained_path, args.overwrite_imagenet, encoder)
-        else:
+        elif 'x' in args.input_keys:
             encoder = ResNet(args.model_version, out_channels, args.pretrained)
+        elif 'weight' in args.input_keys:
+            encoder = dfusion.WeightNet(args.num_classes, out_channels, args.pc_embed_channels, pc_scale=args.pc_scale,
+                                        pc_temp=args.pc_temp)
+        else:
+            raise ValueError('No model implemented for the input keys {}'.format(args.input_keys))
+
     elif args.model_name == 'EffNet':
         check_encoder(args, __efficientNets__)
         if 'depth' in args.input_keys:
@@ -141,7 +153,8 @@ def load_red_net_pretrained(path, overwrite, encoder):
             if 'num_batches_tracked' not in key and 'fc.' not in key and 'fusion' not in key:
                 missing.append(key)
 
-    encoder.load_state_dict(new_sd, strict=False)
+    #encoder.load_state_dict(new_sd, strict=False)
+    encoder = load_fitting_state_dict(encoder, new_sd)
     print('loaded {}/{} for {} weights  from {}'.format(len(new_sd), len(sd), len(sd_), path))
     return encoder
 
@@ -158,6 +171,24 @@ class ResNet(nn.Module):
 
     def forward(self, x):
         return self.arch(x)
+
+
+class ResNetDepth(nn.Module):
+    def __init__(self, encoder: str, num_classes: int, pretrained: bool = False, depth_channels: int = 1):
+        super(ResNetDepth, self).__init__()
+        self.depth_encoder = ResNet(encoder, num_classes, pretrained=pretrained)
+        self.depth_channels = depth_channels
+        if depth_channels != 3:
+            self.depth_encoder.arch.conv1 = nn.Conv2d(depth_channels,
+                                                      64,
+                                                      kernel_size=tuple(self.depth_encoder.arch.conv1.kernel_size),
+                                                      stride=tuple(self.depth_encoder.arch.conv1.stride),
+                                                      padding=tuple(self.depth_encoder.arch.conv1.padding),
+                                                      bias=bool(self.depth_encoder.arch.conv1.bias))
+        self.out_channels = self.depth_encoder.out_channels
+
+    def forward(self, x=None, depth=None):
+        return self.depth_encoder(depth)
 
 
 class EfficientNet(nn.Module):

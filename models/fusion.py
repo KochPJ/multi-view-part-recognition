@@ -6,6 +6,45 @@ from einops import rearrange, repeat
 from einops.layers.torch import Rearrange
 from models.transformer import TransformerEncoderDecoder
 import math
+from utils.stuff import load_fitting_state_dict
+
+
+
+class WeightNet(nn.Module):
+    def __init__(self, num_classes: int, out_channels: int, pc_embed_channels: int = 64, pc_scale=200*math.pi,
+                 with_fc=True, pc_temp=2000):
+        super(WeightNet, self).__init__()
+        self.weight_fusion = nn.Sequential(
+            nn.Linear(pc_embed_channels, pc_embed_channels * 2),
+            nn.Linear(pc_embed_channels * 2, pc_embed_channels * 4),
+            nn.Linear(pc_embed_channels * 4, pc_embed_channels * 8),
+            nn.Linear(pc_embed_channels * 8, pc_embed_channels * 8),
+            nn.Linear(pc_embed_channels * 8, out_channels),
+        )
+
+        self.with_fc = with_fc
+        if self.with_fc:
+            self.fc = nn.Linear(out_channels, num_classes)
+            self.drop = nn.Dropout(0.5)
+            self.out_channels = num_classes
+        else:
+            self.drop = None
+            self.fc = None
+            self.out_channels = out_channels
+
+        self.pc_embed_channels = pc_embed_channels
+        self.pc_scale = pc_scale
+        self.pc_temp = pc_temp
+
+    def forward(self, weight):
+        weight = get_pos_embed(weight, self.pc_embed_channels, scale=self.pc_scale, temperature=self.pc_temp).squeeze(1)
+        weight = self.weight_fusion(weight)
+        if self.fc is not None:
+            if self.training:
+                weight = self.drop(weight)
+            weight = self.fc(weight)
+        return weight
+
 
 class MaxPool(nn.Module):
     def __init__(self, num_views: int):
@@ -35,11 +74,13 @@ class Mean(nn.Module):
 
 
 class FCMultiViewFusion(nn.Module):
-    def __init__(self, channels: int, num_views: int, num_fusion_layers: int = 3, pc_embed_channels=64):
+    def __init__(self, channels: int, num_views: int, num_fusion_layers: int = 3, pc_embed_channels=64,
+                 pc_scale=200*math.pi, pc_temp=2000):
         self.pc_embed_channels = pc_embed_channels
         self.channels = channels
         self.num_views = num_views
-
+        self.pc_scale = pc_scale
+        self.pc_temp = pc_temp
         super().__init__()
         if num_fusion_layers > 1:
             c = channels * num_views
@@ -58,7 +99,9 @@ class FCMultiViewFusion(nn.Module):
         x = x.flatten(1)
         if weight is not None:
             weight_ = torch.zeros((len(x), self.channels * self.num_views))
-            weight_[:, :self.pc_embed_channels] = get_pos_embed(weight, self.pc_embed_channels).squeeze(1)
+            weight_[:, :self.pc_embed_channels] = get_pos_embed(weight, self.pc_embed_channels,
+                                                                scale=self.pc_scale, temperature=self.pc_temp
+                                                                ).squeeze(1)
             x = x + weight_.to(x.device)
         return self.fusion(x)
 
@@ -294,13 +337,15 @@ class Transformer(nn.Module):
 
 class TransformerMultiViewHead(nn.Module):
     def __init__(self, channels, num_views, layers=1, heads=8, with_positional_encoding=False, learnable_pe=False,
-                 pc_embed_channels=64):
+                 pc_embed_channels=64, pc_scale=200*math.pi, pc_temp=2000):
         super().__init__()
         self.num_views = num_views
         self.with_positional_encoding = with_positional_encoding
         self.learnable_pe = learnable_pe
         self.channels = channels
         self.pc_embed_channels = pc_embed_channels
+        self.pc_temp = pc_temp
+        self.pc_scale = pc_scale
         self.tf = Transformer(channels, layers, heads, channels, channels)
         if self.with_positional_encoding:
             if self.learnable_pe:
@@ -308,7 +353,9 @@ class TransformerMultiViewHead(nn.Module):
             else:
                 self.pos_emb = torch.zeros((self.num_views, self.channels))
                 self.pos_emb[:, :self.pc_embed_channels] = get_pos_embed(torch.arange(0, self.num_views).unsqueeze(0),
-                                                                         pc_embed_channels).squeeze(0)
+                                                                         pc_embed_channels,
+                                                                         scale=self.pc_scale,
+                                                                         temperature=self.pc_temp).squeeze(0)
         else:
             self.pos_emb = None
 
@@ -330,13 +377,15 @@ class TransformerMultiViewHead(nn.Module):
 
 class TransformerMultiViewHeadDecoder(nn.Module):
     def __init__(self, channels, num_views, layers=1, heads=8, with_positional_encoding=False, learnable_pe=False,
-                 pc_embed_channels=64):
+                 pc_embed_channels=16, pc_scale=200*math.pi, pc_temp=2000):
         super().__init__()
         self.num_views = num_views + 1
         self.with_positional_encoding = with_positional_encoding
         self.learnable_pe = learnable_pe
         self.channels = channels
         self.pc_embed_channels = pc_embed_channels
+        self.pc_scale = pc_scale
+        self.pc_temp = pc_temp
         self.tf = Transformer(channels, layers, heads, channels, channels)
         if self.with_positional_encoding:
             if self.learnable_pe:
@@ -344,7 +393,9 @@ class TransformerMultiViewHeadDecoder(nn.Module):
             else:
                 self.pos_emb = torch.zeros((self.num_views, self.channels))
                 self.pos_emb[:, :self.pc_embed_channels] = get_pos_embed(torch.arange(0, self.num_views).unsqueeze(0),
-                                                                         pc_embed_channels).squeeze(0)
+                                                                         pc_embed_channels,
+                                                                         scale=self.pc_scale,
+                                                                         temperature=self.pc_temp).squeeze(0)
         else:
             self.pos_emb = None
 
@@ -360,7 +411,9 @@ class TransformerMultiViewHeadDecoder(nn.Module):
         query = self.query_emb.weight.repeat(len(x), 1)
         if weight is not None:
             weight_ = torch.zeros((len(x), self.channels))
-            weight_[:, :self.pc_embed_channels] = get_pos_embed(weight, self.pc_embed_channels).squeeze(1)
+            weight_[:, :self.pc_embed_channels] = get_pos_embed(weight, self.pc_embed_channels,
+                                                                scale=self.pc_scale,
+                                                                temperature=self.pc_temp).squeeze(1)
             query = query + weight_.to(query.device)
 
         x = torch.hstack([query.unsqueeze(1), x])
@@ -376,7 +429,8 @@ class TransformerMultiViewHeadDecoder(nn.Module):
 class TransfomerEncoderDecoderMultiViewHead(nn.Module):
     def __init__(self, channels, num_views, layers=1, heads=8, dim_feedforward=2048, activation="relu",
                  normalize_before=False, return_intermediate_dec=False, with_positional_encoding=True,
-                 pc_embed_channels=64, learnable_pe=False):
+                 pc_embed_channels=64, learnable_pe=False, use_weightnet=False, pc_temp=2000, pc_scale=200*math.pi,
+                 freeze_weightnet=False):
         super().__init__()
         self.tf = TransformerEncoderDecoder(d_model=channels, nhead=heads, num_encoder_layers=layers,
                                             num_decoder_layers=layers, dim_feedforward=dim_feedforward,
@@ -389,18 +443,41 @@ class TransfomerEncoderDecoderMultiViewHead(nn.Module):
         self.pc_embed_channels = pc_embed_channels
         self.num_views = num_views
         self.channels = channels
+        self.pc_scale = pc_scale
+        self.pc_temp = pc_temp
         if self.with_positional_encoding:
             if self.learnable_pe:
                 self.pos_emb = nn.Embedding(self.num_views, self.channels)
             else:
                 self.pos_emb = torch.zeros((self.num_views, self.channels))
                 self.pos_emb[:, :self.pc_embed_channels] = get_pos_embed(torch.arange(0, self.num_views).unsqueeze(0),
-                                                                         pc_embed_channels).squeeze(0)
+                                                                         pc_embed_channels,
+                                                                         scale=self.pc_scale,
+                                                                         temperature=self.pc_temp).squeeze(0)
 
         else:
             self.pos_emb = None
 
-        self.query_emb = nn.Embedding(1, self.channels)
+        self.use_weightnet = use_weightnet
+        self.freeze_weightnet = freeze_weightnet
+        if self.use_weightnet:
+            weightet_path = '/home/kochpaul/git/multi-view-part-recognition/results/run100/WeightNet10000/WeightNet10000_best.ckpt'
+            sd = torch.load(weightet_path, map_location='cpu')['state_dict']
+            #print(sd.keys())
+
+            self.weightNet = WeightNet(0, channels, with_fc=False)
+            self.weightNet = load_fitting_state_dict(self.weightNet, sd)
+
+            if self.freeze_weightnet:
+                for param in self.weightNet.parameters():
+                    param.requires_grad = False
+                #for param in self.weightNet.parameters():
+                #    print(param.requires_grad)
+
+            self.query_emb = None
+        else:
+            self.weightNet = None
+            self.query_emb = nn.Embedding(1, self.channels)
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -416,17 +493,24 @@ class TransfomerEncoderDecoderMultiViewHead(nn.Module):
                 pos_embed = self.pos_emb.to(x.device)
         else:
             pos_embed = None
-        query = self.query_embed.weight.repeat(len(x), 1)
 
         if weight is not None:
-            weight_ = torch.zeros((len(x), self.channels))
-            weight_[:, :self.pc_embed_channels] = get_pos_embed(weight, self.pc_embed_channels).squeeze(1)
-            query = query + weight_.to(query.device)
+            if self.weightNet is not None:
+                query = self.weightNet(weight)
+            else:
+                weight = get_pos_embed(weight, self.pc_embed_channels,
+                                       scale=self.pc_scale, temperature=self.pc_temp).squeeze(1)
+                query = self.query_embed.weight.repeat(len(x), 1)
+                query[:, :self.pc_embed_channels] = weight
+        else:
+            query = self.query_embed.weight.repeat(len(x), 1)
+
 
         out, _ = self.tf(x, None, query, pos_embed)
         return out.squeeze(1)
 
-def get_pos_embed(x, num_pos_feats=64, temperature=2000, scale=200*math.pi):
+#def get_pos_embed(x, num_pos_feats=64, temperature=2000, scale=200*math.pi):
+def get_pos_embed(x, num_pos_feats=16, temperature=2000, scale=100*math.pi):
     if scale is None:
         scale = 2 * math.pi
         x = x * scale
@@ -443,18 +527,19 @@ def get_pos_embed(x, num_pos_feats=64, temperature=2000, scale=200*math.pi):
 
 if __name__ == '__main__':
 
-    c = 512
+    c = 1024
     v = 3
-    m = TransfomerEncoderDecoderMultiViewHead(c, v, with_positional_encoding=False, learnable_pe=True)
-    m = m.to('cuda:0')
+    m = TransfomerEncoderDecoderMultiViewHead(c, v, with_positional_encoding=False, learnable_pe=True,
+                                              use_weightnet=True)
+    #m = m.to('cuda:0')
     bs = 4
     weight = torch.rand((bs, 1)) * 5
     #print(weight)
     #weight = None
 
     x = torch.rand((bs, v, c))
-    out = m(x.to('cuda:0') )#, weight.to('cuda:0')) #
-    print(out.shape)
+    out = m(x, weight)#, weight.to('cuda:0')) #
+    print(out.shape)#.to('cuda:0')
 
 
 

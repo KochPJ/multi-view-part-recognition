@@ -1,3 +1,5 @@
+import copy
+
 import torch
 import numpy as np
 import json
@@ -11,19 +13,18 @@ from utils.metric import TopKAccuracy
 from utils.stuff import bar_progress, lookup, load_fitting_state_dict
 import time
 import random
-import math
 
 
 def get_args_parser():
     parser = argparse.ArgumentParser('Set MultiView', add_help=False)
 
     # training
-    parser.add_argument('--name', default='ResNet_34_nr3_1_6_9-res512-ms', type=str)
-    parser.add_argument('--outdir', default='./results', type=str)
+    parser.add_argument('--name', default='WeightNet100-6', type=str)
+    parser.add_argument('--outdir', default='./results/run100', type=str)
     parser.add_argument('--epochs', default=100, type=int) #100
     parser.add_argument('--start_epoch', default=0, type=int)
-    parser.add_argument('--batch_size', default=32, type=int) #32
-    parser.add_argument('--num_workers', default=34, type=int) #34
+    parser.add_argument('--batch_size', default=512, type=int) #32
+    parser.add_argument('--num_workers', default=2, type=int) #34
     parser.add_argument('--device', default='cuda:0', type=str)
     parser.add_argument('--multi_gpu', default=True, type=bool)
 
@@ -33,7 +34,7 @@ def get_args_parser():
 
     # loss
     parser.add_argument('--lr_group_wise', default=False, type=bool)
-    parser.add_argument('--lr', default=1e-4, type=float)
+    parser.add_argument('--lr', default=1e-6, type=float)
     parser.add_argument('--lr_encoder', default=1e-4, type=float)
     parser.add_argument('--lr_fusion', default=1e-4, type=float)
 
@@ -46,7 +47,7 @@ def get_args_parser():
     parser.add_argument('--shuf_views', default=False, type=bool)
     parser.add_argument('--shuf_views_cw', default=True, type=bool)
     parser.add_argument('--shuf_views_cw_disable', default=0.7, type=float)
-    parser.add_argument('--enable_weight_input', default=-1, type=float)
+    parser.add_argument('--enable_weight_input', default=0, type=float)
     parser.add_argument('--shuf_views_vw', default=True, type=bool)
     parser.add_argument('--p_shuf_cw', default=1.0, type=float)
     parser.add_argument('--p_shuf_vw', default=1.0, type=float)
@@ -54,8 +55,8 @@ def get_args_parser():
     parser.add_argument('--views', default='1-6-9', type=str) #1-6-9
     parser.add_argument('--random_view_order', default=False, type=bool)
     parser.add_argument('--rotations', default='0-1-2-3-4-5-6-7-8-9-10-11', type=str)
-    parser.add_argument('--input_keys', default='x', type=str)
-    parser.add_argument('--load_keys', default='x-mask', type=str)
+    parser.add_argument('--input_keys', default='weight', type=str)
+    parser.add_argument('--load_keys', default='weight', type=str)
     parser.add_argument('--num_classes', default=-1, type=int)
     parser.add_argument('--visualize_samples', default=False, type=bool)
     parser.add_argument('--show_axis', default=True, type=bool)
@@ -95,16 +96,12 @@ def get_args_parser():
     parser.add_argument('--with_positional_encoding', default=True, type=bool)
     parser.add_argument('--learnable_pe', default=True, type=bool)
     parser.add_argument('--pc_embed_channels', default=64, type=int)
-    parser.add_argument('--pc_scale', default=200*math.pi, type=float)
-    parser.add_argument('--pc_temp', default=2000, type=float)
-    parser.add_argument('--use_weightNet', default=False, type=bool)
-    parser.add_argument('--freeze_weightnet', default=False, type=bool)
 
     # scheduler
     parser.add_argument('--one_cycle', default=True, type=bool)
-    parser.add_argument('--pct_start', default=0.5, type=float)
-    parser.add_argument('--div_factor', default=10.0, type=float)
-    parser.add_argument('--final_div_factor', default=100.0, type=float)
+    parser.add_argument('--pct_start', default=0.2, type=float)
+    parser.add_argument('--div_factor', default=1.0, type=float)
+    parser.add_argument('--final_div_factor', default=1000.0, type=float)
 
     # misc
     parser.add_argument('--time_max', default=1000, type=int)
@@ -127,6 +124,136 @@ def main(args):
         cp = None
 
     ds = get_dataset(args)
+
+    weights = []
+    zeros = []
+    classes = []
+    for cls, meta in ds['meta'].items():
+        if meta['weight'] == 0:
+            zeros.append(cls)
+        #else:
+        weights.append(meta['weight'])
+        classes.append(cls)
+
+    weights = np.array(weights)
+
+    nearest = []
+    same = {}
+    same_w = {}
+    eps = np.arange(0, 101) / 1000
+    top1 = [0 for _ in range(len(eps))]
+    top3 = [0 for _ in range(len(eps))]
+    top5 = [0 for _ in range(len(eps))]
+    top1p = [0 for _ in range(len(eps))]
+    top3p = [0 for _ in range(len(eps))]
+    top5p = [0 for _ in range(len(eps))]
+    #eps_p = np.arange(0, 101) / 1000
+
+    for i, (w, cls) in enumerate(zip(weights, classes)):
+        new = copy.deepcopy(weights)
+        new[i] = -1000
+        sub = np.abs(new - w)
+        for ij, e in enumerate(eps):
+            n = np.sum(sub <= e)
+            if n == 0:
+                top1[ij] += 1
+            if n < 3:
+                top3[ij] += 1
+            if n < 5:
+                top5[ij] += 1
+
+            n = np.sum(sub <= e*w)
+            if n == 0:
+                top1p[ij] += 1
+            if n < 3:
+                top3p[ij] += 1
+            if n < 5:
+                top5p[ij] += 1
+
+        mini = np.min(sub)
+        if mini == 0:
+            xs = np.where(sub == 0)[0]
+            same_names = [classes[int(j)] for j in xs]
+            same[cls] = same_names
+            same_w[cls] = w
+        else:
+            nearest.append(mini)
+
+    print('zeros', len(zeros), zeros)
+    print('weights', len(weights), np.mean(weights), np.std(weights), np.max(weights), np.min(weights))
+    print('nearest', len(nearest), np.mean(nearest), np.std(nearest), np.max(nearest), np.min(nearest))
+    print('sames', len(same), len(same)/len(ds['meta']), same.keys())
+
+
+    import matplotlib.pyplot as plt
+    from PIL import Image
+    top1 = (np.array(top1) / len(weights)) * 100
+    top3 = (np.array(top3) / len(weights)) * 100
+    top5 = (np.array(top5) / len(weights)) * 100
+    top1p = (np.array(top1p) / len(weights)) * 100
+    top3p = (np.array(top3p) / len(weights)) * 100
+    top5p = (np.array(top5p) / len(weights)) * 100
+    print(len(top1), len(top3), len(top5))
+    print(top5)
+
+    plt.style.use('seaborn-v0_8-whitegrid')
+    plt.subplot(1,2,1)
+
+    plt.plot(eps, top1)
+    plt.plot(eps, top3)
+    plt.plot(eps, top5)
+    plt.legend(['Top1', 'Top3', 'Top5'])
+    plt.xlabel('Epsilon')
+    plt.title('Constant')
+    plt.ylabel('Acc [%]')
+    plt.subplot(1, 2, 2)
+    plt.plot(eps, top1p)
+    plt.plot(eps, top3p)
+    plt.plot(eps, top5p)
+    plt.title('Proportional')
+    #plt.legend(['Top1', 'Top3', 'Top5'])
+    plt.xlabel('Epsilon')
+    #plt.ylabel('Acc [%]')
+    plt.show()
+    '''
+    bins = np.arange(0, int(np.max(weights) + 2)*2) / 2
+    print(bins)
+    ids = np.digitize(weights, bins)
+    ids = np.unique(ids, return_counts=True)
+    print(ids)
+    counts = np.zeros((len(bins)))
+    print(counts.shape)
+    for u, c in zip(ids[0], ids[1]):
+        counts[u] = c
+
+
+    plt.bar([str(b) for b in bins], counts)
+    plt.show()
+
+
+
+    for zero in zeros:
+        img = Image.open(ds['train'][zero][0]['09']['rgb'])
+        plt.imshow(img)
+        plt.title(zero)
+        plt.show()
+
+    for s, v in same.items():
+        print(s, len(v), v)
+
+        img = Image.open(ds['train'][s][0]['09']['rgb'])
+        plt.subplot(2, 3, 1)
+        plt.imshow(img)
+        plt.title(s + ' ' + str(float(same_w[s])))
+        for k, cls in enumerate(v):
+            img = Image.open(ds['train'][cls][0]['09']['rgb'])
+            plt.subplot(2, 3, 2+k)
+            plt.imshow(img)
+            plt.title(cls)
+        plt.show()
+
+    input()
+    '''
 
     if args.shuf_views and not args.shuf_views_cw and args.p_shuf_cw == -1:
         args.p_shuf_cw = float(1.0/len(args.views.split('-')))
@@ -351,6 +478,7 @@ def main(args):
             #    break
             for key in x:
                 x[key] = x[key].to(device)
+                #print(key, x[key].shape)
 
             if isinstance(y, dict):
                 for key in y:

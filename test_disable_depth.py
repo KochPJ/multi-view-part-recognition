@@ -8,17 +8,17 @@ import torch.nn as nn
 from models.multiview import get_model
 import torch.optim.lr_scheduler as schedulers
 from utils.metric import TopKAccuracy
-from utils.stuff import bar_progress, lookup
+from utils.stuff import bar_progress, lookup, load_fitting_state_dict
 import time
 import random
+import copy
 
 
 def get_args_parser():
     parser = argparse.ArgumentParser('Set MultiView', add_help=False)
-
     # training
-    parser.add_argument('--name', default='ResNet_34_nr3_1_6_9-res512-ms', type=str)
-    parser.add_argument('--outdir', default='./results', type=str)
+    parser.add_argument('--name', default='ResNet_50_nr3_1-6-9_dfuse_TFED_RGBDMVF_Norm', type=str)
+    parser.add_argument('--outdir', default='./results/run008', type=str)
     parser.add_argument('--epochs', default=100, type=int) #100
     parser.add_argument('--start_epoch', default=0, type=int)
     parser.add_argument('--batch_size', default=32, type=int) #32
@@ -85,10 +85,12 @@ def get_args_parser():
     parser.add_argument('--overwrite_imagenet', default=True, type=bool)
     parser.add_argument('--encoder_path', default='', type=str)
     parser.add_argument('--depth_fusion', default='Squeeze&Excite', type=str) #['Squeeze&Excite',  'Conv']
+    parser.add_argument('--fuse_layers', default=True, type=bool)
     parser.add_argument('--tf_layers', default=1, type=int) #['Squeeze&Excite',  'Conv']
     parser.add_argument('--multi_head_classification', default=True, type=bool)
     parser.add_argument('--rgbd_wise_multi_head', default=True, type=bool)
     parser.add_argument('--with_positional_encoding', default=False, type=bool)
+    parser.add_argument('--rgbd_wise_mv_fusion', default=False, type=bool)
     parser.add_argument('--learnable_pe', default=False, type=bool)
     parser.add_argument('--pc_embed_channels', default=64, type=int)
 
@@ -115,8 +117,8 @@ def main(args):
     if os.path.exists(best_dir):
         cp = torch.load(best_dir)
         print('loaded best checkpoint from {}'.format(best_dir))
-        for key, arg in cp['logs']['args']:
-            if getattr(args, key) != arg if key not in ignore_keys:
+        for key, arg in cp['logs']['args'].items():
+            if getattr(args, key) != arg and key not in ignore_keys:
                 print('set {}: {} -> {}'.format(key, getattr(args, key), arg))
                 setattr(args, key, arg)
     else:
@@ -133,15 +135,15 @@ def main(args):
         print('Shuffle view wise with p={}'.format(args.p_shuf_vw))
 
     classes = sorted(list(ds['test'].keys()))
-    dataset = Dataset(args, ds['test'], ds['meta'], mode=mode, classes=classes)
-    args.num_classes = dataset['test'].num_classes
+    dataset = Dataset(args, ds['test'], ds['meta'], mode='test', classes=classes)
+    args.num_classes = dataset.num_classes
     print('number of classes: {}'.format(args.num_classes))
 
     dataloader = torch.utils.data.DataLoader(dataset=dataset,
                                                     batch_size=1,
                                                     shuffle=False,
                                                     num_workers=args.num_workers,
-                                                    drop_last=False) for mode in modes}
+                                                    drop_last=False)
 
     print('##############')
     mode = 'test'
@@ -166,7 +168,8 @@ def main(args):
     model = get_model(args)
     if cp is not None:
         print('loading best model state dict from {}'.format(best_dir))
-        model.load_state_dict(cp['state_dict'])
+        #model.load_state_dict(cp['state_dict'])
+        model = load_fitting_state_dict(model, cp['state_dict'])
 
     if args.multi_gpu and torch.cuda.device_count() > 1 and args.device != 'cpu':
         model = nn.DataParallel(model)
@@ -198,7 +201,8 @@ def main(args):
         cls = classes[int(y[0])]
         for key in x:
             if key == 'depth':
-                x[key] = (torch.rand(x[key].shape)-0.5)
+                #x[key] = (torch.rand(x[key].shape)-0.5)
+                x[key] = torch.zeros(x[key].shape)
             x[key] = x[key].to(device)
 
         if isinstance(y, dict):

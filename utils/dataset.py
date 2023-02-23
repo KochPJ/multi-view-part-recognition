@@ -40,7 +40,8 @@ def get_dataset(args):
                             'mask_mean': os.path.join(sdir, v, '{}_rgb_mean_mask_gen.png'.format(v_id)),
                             'depth_mean': os.path.join(sdir, v, '{}_depth_mean.png'.format(v_id)),
                             'meta': os.path.join(sdir, v, '{}_meta.json'.format(v_id)),
-                            'view': v
+                            'view': v,
+                            'hha': os.path.join(sdir, v, '{}_hha.png'.format(v_id))
                         }
                 if args.multiview:
                     ds[mode][cls].append(sample)
@@ -70,7 +71,8 @@ def get_dataset(args):
                             'depth_mean': os.path.join(sdir, v, '{}_depth_mean.png'.format(v_id)),
                             'meta': os.path.join(sdir, v, '{}_meta.json'.format(v_id)),
                             'rot': rot,
-                            'view': v
+                            'view': v,
+                            'hha': os.path.join(sdir, v, '{}_hha.png'.format(v_id))
                         }
 
                 if args.multiview:
@@ -154,26 +156,28 @@ class Dataset(data.Dataset):
                 augs.append(RandomFlip())
             if args.rotation_aug:
                 augs.append(RandomRotation())
-            if args.enable_weight_input > 0:
+            if args.enable_weight_input >= 0:
                 augs.append(RandomNoise())
             if 'depth' in args.input_keys and not args.depth2hha:
                 augs.append(DepthNoise())
+
             self.augs = transforms.Compose(augs)
         print('{} |Augmentation transforms: {}'.format(mode, self.augs))
         self.multi_scale = args.multi_scale_training if not self.eval else False
         self.color_pre = transforms.Compose([
-            RoiCrop(),
+            RoiCrop(updsampling_threshold=args.updsampling_threshold),
             Resize(width=args.width, height=args.height,
                    multi_scale_training=self.multi_scale,
                    training_scale_low=args.training_scale_low, training_scale_high=args.training_scale_high)
         ])
 
-        depth_mean = args.depth_mean if not args.depth2hha else args.depth_mean_hha
-        depth_std = args.depth_std if not args.depth2hha else args.depth_std_hha
+        depth_mean = args.depth_mean if not args.depth2hha else [float(d) for d in args.depth_mean_hha.split('-')]
+        depth_std = args.depth_std if not args.depth2hha else [float(d) for d in args.depth_std_hha.split('-')]
+
 
         print('{} |Color transforms: {}'.format(mode, self.color_pre))
         self.tensor_pre = transforms.Compose([
-            ToTensor(),
+            ToTensor(args.depth2hha),
             Normalize(mean=None, std=None, depth_mean=depth_mean, depth_std=depth_std,
                       norm_depth=self.args.norm_depth if not self.args.depth2hha else False)
         ])
@@ -198,9 +202,11 @@ class Dataset(data.Dataset):
             x['weight'] = torch.Tensor([meta['weight']])
             x['size'] = torch.Tensor([meta['size']]) / 1000 # [150.0, 222.0, 157.0]
 
+        if self.color_pre is not None:
+            x = self.color_pre(x)
+
         if self.augs is not None:
             x = self.augs(x)
-        x = self.color_pre(x)
 
         if not self.args.visualize_samples:
             x = self.tensor_pre(x)
@@ -309,14 +315,15 @@ class Dataset(data.Dataset):
             sample, _ = self.__getitem__(index)
             for depth in sample['depth']:
                 depth = np.array(depth)
-                print(depth.shape, np.mean(depth), np.std(depth))
+                print(depth.shape, np.mean(depth), np.std(depth), self.args.depth2hha)
+                input()
                 if not self.args.depth2hha:
                     means.append(np.mean(depth))
                     stds.append(np.std(depth))
                 else:
                     for i in range(3):
-                        means[i].append(np.mean(depth[:, :, i]))
-                        stds[i].append(np.std(depth[:, :, i]))
+                        means[i].append(np.mean(depth[i, :, :]))
+                        stds[i].append(np.std(depth[i, :, :]))
         if not args.depth2hha:
             mean = float(np.mean(means))
             std = float(np.mean(stds))
@@ -335,10 +342,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser('MultiView training script', parents=[get_args_parser()])
     args = parser.parse_args()
 
-    setattr(args, 'depth2hha', True)
+    setattr(args, 'depth2hha', False)
     setattr(args, 'norm_depth', True)
-    setattr(args, 'depth_mean', None)
-    setattr(args, 'depth_std', None)
+    #setattr(args, 'depth_mean', None)
+    #setattr(args, 'depth_std', None)
     setattr(args, 'depth_mean_hha', None)
     setattr(args, 'depth_std_hha', None)
     setattr(args, 'input_keys', 'x-depth')
@@ -347,7 +354,8 @@ if __name__ == '__main__':
     setattr(args, 'views', '1-2-3-4-5-6-7-8-9-10')
     ds = get_dataset(args)
     classes = sorted(list(ds['train'].keys()))
-    dataset = Dataset(args, ds['train'], ds['meta'], mode='test', classes=classes)
+    dataset = Dataset(args, ds['train'], ds['meta'], mode='train', classes=classes)
+    dataset.color_pre = None
     print('color_pre', dataset.color_pre)
     print('augs', dataset.augs)
     print(dataset.get_depth_mean_std())

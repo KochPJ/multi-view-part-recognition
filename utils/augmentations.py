@@ -17,15 +17,18 @@ class RandomRotation:
     def __call__(self, sample):
         if self.uniform:
             angle = random.uniform(self.min_degree, self.max_degree)
-            sample['x'] = [F.rotate(x, angle) for x in sample.get('x')]
+            if 'x' in sample:
+                sample['x'] = [F.rotate(x, angle) for x in sample.get('x')]
             if 'depth' in sample:
                 sample['depth'] = [F.rotate(x, angle) for x in sample.get('depth')]
             if 'mask' in sample:
                 sample['mask'] = [F.rotate(x, angle) for x in sample.get('mask')]
         else:
-            for i, x in enumerate(sample['x']):
+            key = 'x' if 'x' in sample else 'depth'
+            for i, x in enumerate(sample.get(key, [])):
                 angle = random.uniform(self.min_degree, self.max_degree)
-                sample['x'][i] = F.rotate(x, angle)
+                if 'x' in sample:
+                    sample['x'][i] = F.rotate(x, angle)
                 if 'depth' in sample:
                     sample['depth'][i] = F.rotate(sample['depth'][i], angle)
                 if 'mask' in sample:
@@ -53,7 +56,8 @@ class ColorJitter:
                                          hue=self.hue)
 
     def __call__(self, sample):
-        sample['x'] = [self.tf(x) for x in sample['x']]
+        if 'x' in sample:
+            sample['x'] = [self.tf(x) for x in sample['x']]
         return sample
 
     def __repr__(self):
@@ -65,7 +69,7 @@ class ColorJitter:
         return format_string
 
 class RandomNoise:
-    def __init__(self, p=0.01, disable=0.05, const=0.050):
+    def __init__(self, p=0.01, disable=0.00, const=0.020):
         self.disable = disable
         self.p = p
         self.const = const
@@ -167,9 +171,17 @@ class DepthNoise:
                 depth[mask] = depth[mask] + offset
                 depth[depth < 0] = 0
 
-        noise = (torch.rand(depth.shape).numpy() * 2) - 1
-        noise = np.array(noise * self.max_noise, dtype=np.int32)
-        depth[depth > self.max_noise] += noise[depth > self.max_noise]
+        #noise = (torch.rand(depth.shape).numpy() * 2) - 1
+        #noise = np.array(noise * self.max_noise, dtype=np.int32)
+        #depth[depth > self.max_noise] += noise[depth > self.max_noise]
+
+        #noise = (torch.rand(depth.shape).numpy() * 2) - 1
+        #noise = noise * self.max_noise
+
+        noise = torch.normal(0, self.max_noise, depth.shape).numpy()
+        depth[depth > 0] = noise[depth > 0] + depth[depth > 0]
+        depth[depth < 0] = 0
+
         depth = Image.fromarray(depth)
         return depth, depth_zeros
 
@@ -221,6 +233,10 @@ class RandomFlip:
         x = sample.get('x')
         m = sample.get('mask')
         d = sample.get('depth')
+
+        if x is None and d is None:
+            return sample
+
         l = None
         for s in [x, m, d]:
             if s is not None:
@@ -229,6 +245,7 @@ class RandomFlip:
         x = sample.get('x', l)
         m = sample.get('mask', l)
         d = sample.get('depth', l)
+
 
         if self.uniform:
             x, m, d = random_flip([x, m, d], self.p, self.n, self.horizontal, self.vertical, self.diagonal)

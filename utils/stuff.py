@@ -9,24 +9,25 @@ import random
 
 def bar_progress(mode, epoch, step, steps, lr, loss, acc, old_loss, old_acc, times, topk):
 
-    progress = (epoch-1) * steps['train'] + (epoch-1) * steps['valid']
+    progress = (epoch-1) * steps.get('train', 0) + (epoch-1) * steps.get('valid',0 )
     if mode == 'train':
         progress += step
-        d_valid_steps = steps['valid']
-        d_train_steps = steps['train'] - step
-        d_test_steps = steps['test']
+        d_valid_steps = steps.get('valid', 0)
+        d_train_steps = steps.get('train', 0) - step
+        d_test_steps = steps.get('test', 0)
     elif mode == 'valid':
-        progress += steps['train'] + step
-        d_valid_steps = steps['valid'] - step
+        progress += steps.get('train', 0) + step
+        d_valid_steps = steps.get('valid', 0) - step
         d_train_steps = 0
-        d_test_steps = steps['test']
+        d_test_steps = steps.get('test', 0)
     else:
-        progress += steps['train'] + steps['valid'] + step
+        progress += steps.get('train', 0) + steps.get('valid', 0) + step
         d_valid_steps = 0
         d_train_steps = 0
-        d_test_steps = steps['test'] - step
+        d_test_steps = steps.get('test', 0) - step
 
-    progress = progress / (steps['epochs'] * steps['train'] + steps['epochs'] * steps['valid'] + steps['test'])
+    progress = progress / (steps.get('epochs', 0) * steps.get('train', 0) +
+                           steps.get('epochs', 0) * steps.get('valid', 0) + steps.get('test', 0))
 
     loss_delta = float(np.round(loss - old_loss, 4)) if old_loss is not None else None
     acc_delta = float(np.round(acc-old_acc, 4)) if old_acc is not None else None
@@ -35,19 +36,19 @@ def bar_progress(mode, epoch, step, steps, lr, loss, acc, old_loss, old_acc, tim
     b = steps[mode]
     c = '{} step'.format(mode)
 
-    d_epoch = steps['epochs'] - epoch
+    d_epoch = steps.get('epochs', 0) - epoch
 
-    tepoch = np.mean(times['epoch']) if len(times['epoch']) > 0 else None
-    ttrain = np.mean(times['train'])
-    tvalid = np.mean(times['valid']) if len(times['valid']) > 0 else None
-    ttest = np.mean(times['valid']) if len(times['valid']) > 0 else None
+    tepoch = np.mean(times.get('epoch', [0])) if len(times.get('epoch', [])) > 0 else None
+    ttrain = np.mean(times.get('train', [0]))
+    tvalid = np.mean(times.get('valid', [0])) if len(times.get('valid', [])) > 0 else None
+    ttest = np.mean(times.get('test', [0])) if len(times.get('test', [])) > 0 else None
 
     if tvalid is None:
         tvalid = ttrain
     if ttest is None:
         ttest = tvalid
     if tepoch is None:
-        tepoch = ttrain * steps['train'] + tvalid * steps['valid']
+        tepoch = ttrain * steps.get('train', 0) + tvalid * steps.get('valid', 0)
 
     eta = d_epoch * tepoch + d_train_steps * ttrain + d_valid_steps * tvalid + ttest * d_test_steps
 
@@ -80,7 +81,7 @@ def bar_progress(mode, epoch, step, steps, lr, loss, acc, old_loss, old_acc, tim
         eta,
         float(np.round(progress * 100, 4)),
         epoch,
-        steps['epochs'],
+        steps.get('epochs'),
         float(np.round(a / b * 100, 2)),
         a,
         b,
@@ -261,3 +262,26 @@ def lookup(n):
     else:
         raise NotImplementedError
     return int(x), int(y)
+
+
+def load_fitting_state_dict(arch, state_dict):
+    keys = list(arch.state_dict().keys())
+    wrong_key = 0
+    wrong_shape = 0
+    okay = 0
+    for key, v in state_dict.items():
+        if key not in keys:
+            wrong_key += 1
+            continue
+        sd = {key: v}
+        try:
+            arch.load_state_dict(sd, strict=False)
+        except Exception as e:
+            #print(e)
+            wrong_shape += 1
+            continue
+        okay += 1
+    msg = 'Loaded {}/{} weights, wrong key: {}, wrong shape: {}, missing: {}'.format(
+        okay, len(keys), wrong_key, wrong_shape, len(keys) - (okay+wrong_key+wrong_shape) )
+    print(msg)
+    return arch
