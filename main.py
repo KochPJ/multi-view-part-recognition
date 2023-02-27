@@ -50,7 +50,7 @@ def get_args_parser():
     parser.add_argument('--shuf_views_vw', default=True, type=bool)
     parser.add_argument('--p_shuf_cw', default=1.0, type=float)
     parser.add_argument('--p_shuf_vw', default=1.0, type=float)
-    parser.add_argument('--data_views', default='1-2-3-4-5-6-7-8-9-10', type=str) #1-6-9
+    parser.add_argument('--data_views', default='1-6-9', type=str) #1-6-9 #1-2-3-4-5-6-7-8-9-10
     parser.add_argument('--views', default='1-6-9', type=str) #1-6-9
     parser.add_argument('--random_view_order', default=False, type=bool)
     parser.add_argument('--rotations', default='0-1-2-3-4-5-6-7-8-9-10-11', type=str)

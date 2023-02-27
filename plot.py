@@ -90,7 +90,7 @@ if __name__ == '__main__':
     ks = ['1', '3', '5']
     args = ['tf_layers', 'multi_head_classification', 'fusion', 'data_views']
     res = {}
-    min_run = 7
+    min_run = 8
     runs = sorted(list(os.listdir(root)))
     for run in runs:
 
@@ -237,8 +237,8 @@ if __name__ == '__main__':
         viewl = len(v['args']['data_views'].split('-'))
         if viewl == 3:
             v3[exp] = v
-        elif viewl == 10:
-            allv[exp] = v
+        elif viewl != 3:
+            allv[str(viewl)+'_'+exp] = v
 
 
 
@@ -256,6 +256,8 @@ if __name__ == '__main__':
     plot_res(rot_exps, extr= '',  cut='ResNet_50_nr', exp_name='Rotation')
     plot_res(weightnet_exps, extr= '',  cut='', exp_name='WeightNet')
     plot_res(dataview_exps, extr= '',  cut='ResNet_50_nr3_1-6-9_datatviews_', exp_name='DataViews')
+    for key in allv.keys():
+        print(key)
 
 
 
