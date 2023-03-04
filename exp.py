@@ -7,14 +7,14 @@ import argparse
 
 if __name__ == '__main__':
     views_lut = {
-        #'1-a': ['9', '9'],
+        '1-a': ['9', '9'],
         #'1-b': ['9', '1-6-9'],
         #'1-c': ['9', '1-2-3-4-5-6-7-8-9-10'],
-
-        '3': '1-6-9',
-        #'3-c': ['1-6-9', '1-6-9'],
-        #'3-b': ['1-6-9', '1-2-3-4-5-6-7-8-9-10'],
         #'2': '1-10',
+        '3': '1-6-9',
+        '3-c': ['1-6-9', '1-6-9'],
+        #'3-b': ['1-6-9', '1-2-3-4-5-6-7-8-9-10'],
+        '2': '1-10',
         '4': '1-3-8-10',
         '5': '1-3-4-7-9',
         '6': '1-3-2-4-7-9',
@@ -25,7 +25,7 @@ if __name__ == '__main__':
     }
 
     data_views_list = [
-        #'1-6-9',
+        '1-6-9',
         '1-3-8-10',
         '1-3-4-7-9',
         '1-3-2-4-7-9',
@@ -38,24 +38,24 @@ if __name__ == '__main__':
     #    '3': '1-6-9'
     #}
     runs = 5
-    main_view = '3'
+    main_view = '3' #3
 
     parser = argparse.ArgumentParser('MultiView training script', parents=[get_args_parser()])
     args = parser.parse_args()
 
     add_shuffle_exp = False
-    add_fusion_exp = True # True
+    add_fusion_exp = False # True
     add_encoder_decoder_tf = False
     add_PE_exp = False
     add_weight_exp = False # True
     add_roi_crop_exp = False
-    add_view_exp = False
+    add_view_exp = True #10
     add_depth_exp = False #True
     shuffle_all_views_exp = False
     add_pretrain_exp = False
     add_aug_exps = False
-    add_rotation_exps = False # True
-    add_dataviews_exps = False # True
+    add_rotation_exps = True # True 12exps
+    add_dataviews_exps = True # True 8exps
     add_random_view_order_exp = False #True
     add_resize_exp = False
     add_lr_exp = False
@@ -63,9 +63,9 @@ if __name__ == '__main__':
     execute = True
 
     rots = [
-        #'0',
-        #'0-5',
-        #'0-4-8',
+        '0',
+        '0-5',
+        '0-4-8',
         '0-3-6-9',
         '0-2-5-8-10',
         '0-2-4-6-8-10',
@@ -84,11 +84,11 @@ if __name__ == '__main__':
 
 
     depth_epoch_multiplier = 1.0
-    long_multiplier = 2.0
+    long_multiplier = 5.0
     num_epoch_multiplier = 0.5
     tf_layers = 1
-    runs = 17
-    run_start = 13 #3
+    runs = 23
+    run_start = 18 #3
     start_exp = 0 #3
     for run in range(run_start, runs):
         outdir_ = os.path.join(outdir, 'run{}'.format(str(run).zfill(3)))
@@ -133,7 +133,8 @@ if __name__ == '__main__':
                     b = copy.deepcopy(a)
                     setattr(b, 'epochs', int(getattr(a, 'epochs') * num_epoch_multiplier))
                     setattr(b, 'random_view_order', True)
-                    setattr(b, 'fusion', 'Conv')
+                    #setattr(b, 'fusion', 'Conv')
+                    #setattr(b, 'fusion', 'TransfomerEncoderDecoderMultiViewHead')
                     exps.append(b)
 
                 if shuffle_all_views_exp and n != 1:
@@ -252,28 +253,30 @@ if __name__ == '__main__':
                     exps.append(b)
 
                 if add_fusion_exp:
-                    for fusion in ['Conv', 'max-pool']: #, 'Conv','FC', 'max-pool', 'mean', 'Squeeze&Excite', 'SharedSqueeze&Excite'
+                    for fusion in ['Conv', 'max-pool', 'TransfomerEncoderDecoderMultiViewHead',
+                                   'TransformerMultiViewHeadDecoder', 'mean',
+                                   'FC', 'Squeeze&Excite', 'SharedSqueeze&Excite']: #, 'Conv','FC', 'max-pool', 'mean', 'Squeeze&Excite', 'SharedSqueeze&Excite'
                         #, 'max-pool', 'FC', 'mean', 'Squeeze&Excite', 'SharedSqueeze&Excite',
                         #'TransfomerEncoderDecoderMultiViewHead',
                         #      'TransformerMultiViewHeadDecoder'
                         b = copy.deepcopy(a)
                         setattr(b, 'fusion', fusion)
                         setattr(b, 'random_view_order', True)
-                        setattr(b, 'multi_head_classification', True)
+                        setattr(b, 'multi_head_classification', False)
                         setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'fuse_{}'.format(fusion)))
                         #setattr(b, 'multi_head_classification', False)
                         setattr(b, 'tf_layers', 0)
                         exps.append(copy.deepcopy(b))
                         setattr(b, 'fusion', fusion)
                         setattr(b, 'random_view_order', True)
-                        setattr(b, 'multi_head_classification', False)
+                        setattr(b, 'multi_head_classification', True)
                         setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'fuse_{}-multihead'.format(fusion)))
                         #setattr(b, 'multi_head_classification', False)
                         setattr(b, 'tf_layers', 0)
                         exps.append(copy.deepcopy(b))
 
                         if fusion == 'Conv':
-                            setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'fuse_{}_Tr-multiead'.format(fusion)))
+                            setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'fuse_{}_Tr-multihead'.format(fusion)))
                             setattr(b, 'multi_head_classification', True)
                             setattr(b, 'tf_layers', 1)
                             exps.append(copy.deepcopy(b))
@@ -493,27 +496,29 @@ if __name__ == '__main__':
                         setattr(b, 'depth2hha', False)
                         setattr(b, 'norm_depth', False)
                         setattr(b, 'epochs', int(getattr(a, 'epochs') * long_multiplier))
-                        setattr(b, 'lr', 1e-4)
+                        setattr(b, 'lr', 1e-5)
+                        setattr(b, 'div_factor', 1)
+
 
                         setattr(b, 'depth2hha', False)
                         setattr(b, 'norm_depth', True)
                         setattr(b, 'with_rednet_pretrained', True)
-                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'dfuse_Depth-rednet-norm-long'))
+                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'dfuse_Depth-rednet-norm-long2'))
                         exps.append(copy.deepcopy(b))
 
                         setattr(b, 'depth2hha', False)
                         setattr(b, 'norm_depth', False)
-                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'dfuse_Depth-long'))
+                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'dfuse_Depth-long2'))
                         exps.append(copy.deepcopy(b))
 
                         setattr(b, 'depth2hha', True)
                         setattr(b, 'norm_depth', False)
-                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'dfuse_Depth-hha-long'))
+                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'dfuse_Depth-hha-long2'))
                         exps.append(copy.deepcopy(b))
 
                         setattr(b, 'depth2hha', False)
                         setattr(b, 'norm_depth', True)
-                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'dfuse_Depth-norm-long'))
+                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'dfuse_Depth-norm-long2'))
                         exps.append(copy.deepcopy(b))
 
 

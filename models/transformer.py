@@ -58,6 +58,39 @@ class TransformerEncoderDecoder(nn.Module):
         #return hs.transpose(1, 2), memory.permute(1, 2, 0).view(bs, c, d)
         return hs.squeeze(0).permute(1, 0, 2), memory.permute(1, 0, 2)
 
+class TransformerEncoderHead(nn.Module):
+
+    def __init__(self, d_model=1024, nhead=8, num_encoder_layers=1, dim_feedforward=2048, dropout=0.1,
+                 activation="relu", normalize_before=False):
+        super().__init__()
+
+        encoder_layer = TransformerEncoderLayer(d_model, nhead, dim_feedforward,
+                                                dropout, activation, normalize_before)
+        encoder_norm = nn.LayerNorm(d_model) if normalize_before else None
+        self.encoder = TransformerEncoder(encoder_layer, num_encoder_layers, encoder_norm)
+
+        self._reset_parameters()
+
+        self.d_model = d_model
+        self.nhead = nhead
+
+    def _reset_parameters(self):
+        for p in self.parameters():
+            if p.dim() > 1:
+                nn.init.xavier_uniform_(p)
+
+    def forward(self, src, mask, pos_embed=None):
+        # flatten NxCxHxW to HWxNxC
+        bs, c, d = src.shape
+        #
+        src = src.permute(1, 0, 2)
+        if pos_embed is not None:
+            pos_embed = pos_embed.unsqueeze(0).repeat(bs, 1, 1).permute(1, 0, 2)
+
+        tgt = torch.zeros_like(query_embed)
+        memory = self.encoder(src, src_key_padding_mask=mask, pos=pos_embed)
+        return memory.permute(1, 0, 2)
+
 
 class TransformerEncoder(nn.Module):
 

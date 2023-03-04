@@ -21,13 +21,15 @@ if __name__ == '__main__':
 
     for count, cls in enumerate(classes):
         path = '/mnt/share/more_datasets/MVIP/sets/{}/train_data/0/0/'.format(cls)
-        out = '/home/kochpaul/images2'
+        out = '/home/kochpaul/images3'
         print('{}/{} | {}'.format(count+1, len(classes), cls))
 
         ns = [10]
-        views_ = list(os.listdir(path))
-        random.shuffle(views_)
+        views_ = sorted(list(os.listdir(path)))
+        #random.shuffle(views_)
+        print(views_)
 
+        '''
         for n in ns:
 
             h = m + (kh * (n-1))
@@ -64,17 +66,19 @@ if __name__ == '__main__':
             plt.axis('off')
             plt.savefig(op, bbox_inches='tight', pad_inches=0, dpi=dpi)
 
-            plt.show()
+            #plt.show()
 
             plt.imshow(depth)
             plt.axis('off')
             plt.savefig(opd, bbox_inches='tight', pad_inches=0, dpi=dpi)
-            plt.show()
+            #plt.show()
+        '''
 
 
-
-        xx = [1, 2]
-        yy = [10, 2]
+        #xx = [1, 2]
+        #yy = [10, 2]
+        xx = [1]
+        yy = [10]
 
         for x, y in zip(xx, yy):
 
@@ -111,7 +115,7 @@ if __name__ == '__main__':
 
             plt.imshow(img)
             plt.axis('off')
-            plt.show()
+            #plt.show()
 
             k = 0
             op = os.path.join(out, '{}_{}.png'.format(cls, k))

@@ -45,7 +45,7 @@ def get_args_parser():
     parser.add_argument('--roicrop', default=True, type=bool)
     parser.add_argument('--shuf_views', default=False, type=bool)
     parser.add_argument('--shuf_views_cw', default=True, type=bool)
-    parser.add_argument('--shuf_views_cw_disable', default=0.7, type=float)
+    parser.add_argument('--shuf_views_cw_disable', default=0.4, type=float)
     parser.add_argument('--enable_weight_input', default=-1, type=float)
     parser.add_argument('--shuf_views_vw', default=True, type=bool)
     parser.add_argument('--p_shuf_cw', default=1.0, type=float)
@@ -318,6 +318,7 @@ def main(args):
     first_epoch = True
     print('##### Start Training #####')
     t_epoch = time.time()
+    use_best_loss = True
     for epoch in range(args.start_epoch, args.epochs):
         if first_epoch and args.multi_scale_training:
             dataloader['train'].dataset.checking_batch_size = True
@@ -329,6 +330,7 @@ def main(args):
             if epoch == int(args.epochs * args.shuf_views_cw_disable):
                 print('Switching to Class-Wise-Shuffling, thus switching to CrossEntropyLoss')
                 criterion = nn.CrossEntropyLoss()
+                use_best_loss = False
                 binary_cross = False
                 for key in dataloader.keys():
                     setattr(dataloader[key].dataset.args, 'shuf_views_cw', True)
@@ -468,6 +470,7 @@ def main(args):
 
         print('\n')
 
+        best_acc_result = False
         for k, m in metrics.items():
             acc = m.result()
             if epoch == 0:
@@ -477,6 +480,7 @@ def main(args):
 
             if k == bestk and acc > logs['best_acc_valid'][0]:
                 logs['best_acc_valid'] = (acc, epoch)
+                best_acc_result = True
             m.reset()
 
         if epoch == 0:
@@ -492,7 +496,14 @@ def main(args):
             'logs': logs}
         torch.save(ckpt, current_dir)
 
-        if logs['losses_valid'][-1] < logs['best_loss_valid'][0]:
+        best_result = False
+        if use_best_loss:
+            if logs['losses_valid'][-1] < logs['best_loss_valid'][0]:
+                best_result = True
+        elif best_acc_result:
+            best_result = True
+
+        if best_result:
             logs['best_loss_valid'] = (logs['losses_valid'][-1], epoch)
             torch.save(ckpt, best_dir)
 

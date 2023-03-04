@@ -3,10 +3,15 @@ import json
 import numpy as np
 import matplotlib.pyplot as plt
 
-def plot_res(epxs, extr: '',  cut: '', exp_name=''):
+def plot_res(epxs, extr: '',  cut: '', exp_name='', lenght_wise=False, return_mean=False):
     if len(epxs) > 0:
+
+        keys = sorted(epxs.keys())
+        if lenght_wise:
+            keys = sorted(keys, key=len)
+
         # fig, axs = plt.subplots(1, 1, constrained_layout=True)
-        accs, titles, stds, mins, maxs = [], [], [], [], []
+        accs, titles, stds, mins, maxs, ls = [], [], [], [], [], []
         train_loss_m = []
         train_loss_s = []
         valid_loss_m = []
@@ -23,12 +28,13 @@ def plot_res(epxs, extr: '',  cut: '', exp_name=''):
         train_top3_s = []
         train_top5_m = []
         train_top5_s = []
-        for i, name in enumerate(sorted(epxs.keys())):
+        for i, name in enumerate(keys):
             v = epxs[name]
             accs.append(v['topk_test']['1']['m'])
             maxs.append(v['topk_test']['1']['max'])
             mins.append(v['topk_test']['1']['min'])
             stds.append(v['topk_test']['1']['s'])
+            ls.append(v['topk_test']['1']['l'])
 
             title = extr+name[len(cut):]
             titles.append(title)
@@ -54,8 +60,8 @@ def plot_res(epxs, extr: '',  cut: '', exp_name=''):
             valid_top5_s.append(v['topk_valid']['5']['s'])
 
         print('###### {} results ####'.format('{} Exp results'.format(exp_name)))
-        for a, b, c, d, e in zip(titles, accs, stds, mins, maxs):
-            print('{} | mean: {}, std: {}, min: {}, max: {}'.format(a, b, c, d, e))
+        for a, b, c, d, e, l in zip(titles, accs, stds, mins, maxs, ls):
+            print('{} | {} | mean: {}, std: {}, min: {}, max: {}'.format(l, a, b, c, d, e))
         fig, axs = plt.subplots(1, 1, constrained_layout=True)
         fig.suptitle(exp_name, fontsize=16)
         axs.bar(titles, maxs)
@@ -83,6 +89,7 @@ def plot_res(epxs, extr: '',  cut: '', exp_name=''):
             axs[j, n].set_ylabel('CrossEntropy' if 'Loss' in t else 'Acc[%]')
             axs[j, n].set_xlabel('Epochs')
         plt.legend(titles)
+        return np.array(accs), np.array(stds)
 
 
 if __name__ == '__main__':
@@ -90,10 +97,9 @@ if __name__ == '__main__':
     ks = ['1', '3', '5']
     args = ['tf_layers', 'multi_head_classification', 'fusion', 'data_views']
     res = {}
-    min_run = 8
-    runs = sorted(list(os.listdir(root)))
+    min_run = 8 # 8
+    runs = sorted([d for d in os.listdir(root) if 'run' in d])
     for run in runs:
-
         if int(run[3:]) < min_run:
             continue
         for exp in os.listdir(os.path.join(root, run)):
@@ -114,8 +120,11 @@ if __name__ == '__main__':
                     print('     ', key, arg)
 
             if logs['topk_test']['1'] is None:
-                print('exp: {} not finished'.format(exp))
+                print('exp: {}, {} not finished'.format(run, exp))
                 continue
+
+            if 'Conv' in exp and 'Conv_' not in exp:
+                print(exp, run, logs['args']['multi_head_classification'])
 
             if exp not in res:
                 res[exp] = {
@@ -155,7 +164,8 @@ if __name__ == '__main__':
                     res[exp][key][k] = {'m': np.mean(np.array(res[exp][key][k]), axis=0),
                                         's': np.std(np.array(res[exp][key][k]), axis=0),
                                         'max': np.max(np.array(res[exp][key][k]), axis=0),
-                                        'min': np.min(np.array(res[exp][key][k]), axis=0)}
+                                        'min': np.min(np.array(res[exp][key][k]), axis=0),
+                                        'l': len(res[exp][key][k])}
                     #try:
                     #except Exception as e:
                     #    #print(exp, key, res[exp][key][k].shape, np.array(res[exp][key][k]))
@@ -168,7 +178,8 @@ if __name__ == '__main__':
                     res[exp][key] = {'m': np.mean(np.array(res[exp][key]), axis=0),
                                      's': np.std(np.array(res[exp][key]), axis=0),
                                      'max': np.max(np.array(res[exp][key]), axis=0),
-                                     'min': np.min(np.array(res[exp][key]), axis=0)}
+                                     'min': np.min(np.array(res[exp][key]), axis=0),
+                                     'l': len(res[exp][key])}
                 except:
                     print(key, exp)
                     for ii, l in enumerate(res[exp][key]):
@@ -187,6 +198,7 @@ if __name__ == '__main__':
         print(i+1, exp, len(v['runs']), v['runs'])
 
 
+    plt.style.use('seaborn-v0_8-whitegrid')
     depth_epxs = {}
     fusion_exps = {}
     single_exps = {}
@@ -207,13 +219,15 @@ if __name__ == '__main__':
     for exp, v in res.items():
         if '_rota_exp' in exp:
             rot_exps[exp] = v
+
         if '_dataviews_exp' in exp:
             dataview_exps[exp] = v
 
         if 'WeightNet' in exp:
             weightnet_exps[exp] = v
 
-        if '_nr3_' not in exp:
+        if '_nr3_' not in exp and '_fuse_' not in exp and '-b_' not in exp and '3-b_1' not in exp and \
+                'Weight' not in exp and '1-c_9' not in exp:
             view_exps[exp] = v
 
         if '_dfuse_' in exp:
@@ -242,20 +256,42 @@ if __name__ == '__main__':
 
 
 
-    plot_res(depth_epxs, extr='', cut='ResNet_50_nr3_1-6-9_dfuse_', exp_name='Depth Fusion')
-    plot_res(fusion_exps, extr='', cut='ResNet_50_nr3_1-6-9_fuse_', exp_name='MV Fusion')
+    #plot_res(depth_epxs, extr='', cut='ResNet_50_nr3_1-6-9_dfuse_', exp_name='Depth Fusion')
+    #plot_res(fusion_exps, extr='', cut='ResNet_50_nr3_1-6-9_fuse_', exp_name='MV Fusion')
     plot_res(augs_exps, extr='', cut='ResNet_50_nr3_1-6-9_', exp_name='Aug')
-    plot_res(transformer_exps, extr='', cut='ResNet_50_nr', exp_name='Transformer')
-    plot_res(single_exps, extr='', cut='ResNet_50_nr', exp_name='SingeView & Pretrained v3')
+    #plot_res(transformer_exps, extr='', cut='ResNet_50_nr', exp_name='Transformer')
+    #plot_res(single_exps, extr='', cut='ResNet_50_nr', exp_name='SingeView & Pretrained v3')
     #plot_res(v3, extr='', cut='ResNet_50_nr3_1-6-9_', exp_name='3V data views')
     #plot_res(allv, extr='', cut='ResNet_50_nr', exp_name='All Data Views')
-    plot_res(weight_exps, extr= '',  cut= 'ResNet_50_nr3_1-6-9_', exp_name='Weight')
+    #plot_res(weight_exps, extr= '',  cut= 'ResNet_50_nr3_1-6-9_', exp_name='Weight')
 
-    plot_res(view_exps, extr='', cut='ResNet_50_nr', exp_name='View')
-    print(len(rot_exps))
-    plot_res(rot_exps, extr= '',  cut='ResNet_50_nr', exp_name='Rotation')
-    plot_res(weightnet_exps, extr= '',  cut='', exp_name='WeightNet')
-    plot_res(dataview_exps, extr= '',  cut='ResNet_50_nr3_1-6-9_datatviews_', exp_name='DataViews')
+    acc_v, std_v = plot_res(view_exps, extr='', cut='ResNet_50_nr', exp_name='View', lenght_wise=True)
+    acc_r, std_r = plot_res(rot_exps, extr= '',  cut='ResNet_50_nr', exp_name='Rotation')
+    #plot_res(weightnet_exps, extr= '',  cut='', exp_name='WeightNet')
+    acc_d, std_d = plot_res(dataview_exps, extr= '',  cut='ResNet_50_nr3_1-6-9_datatviews_', exp_name='DataViews')
+
+    alpha=0.5
+
+    fig, axs = plt.subplots(1, 1, constrained_layout=True)
+    fig.suptitle('Number of res', fontsize=16)
+
+    xv = [i+1 for i in range(len(acc_v))]
+    plt.plot(xv, acc_v)
+
+    xd = [i+1 for i in range(len(acc_d))]
+    plt.plot(xd, acc_d)
+    xr = [i+1 for i in range(len(acc_r))]
+    plt.plot(xr, acc_r)
+
+    plt.legend(['Inference Views', 'Training Views', 'Object Rotations'])
+    plt.fill_between(xv, acc_v - std_v, acc_v + std_v, alpha=alpha)
+    plt.fill_between(xd, acc_d - std_d, acc_d + std_d, alpha=alpha)
+    plt.fill_between(xr, acc_r - std_r, acc_r + std_r, alpha=alpha)
+    plt.ylabel('ACC  [%]')
+    plt.xlabel('# number of')
+
+
+    print('-----not 3views---')
     for key in allv.keys():
         print(key)
 

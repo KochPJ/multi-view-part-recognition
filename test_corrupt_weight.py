@@ -12,14 +12,15 @@ from utils.stuff import bar_progress, lookup, load_fitting_state_dict
 import time
 import random
 import copy
+import math
 
 
 def get_args_parser():
     parser = argparse.ArgumentParser('Set MultiView', add_help=False)
 
     # training
-    parser.add_argument('--name', default='ResNet_50_nr3_1-6-9_Weight_EDTF02', type=str)
-    parser.add_argument('--outdir', default='./results/run006', type=str)
+    parser.add_argument('--name', default='ResNet_50_nr3_1-6-9_2Weight_TEDF', type=str) #_WeightNet
+    parser.add_argument('--outdir', default='./results/run012', type=str)
     parser.add_argument('--epochs', default=100, type=int) #100
     parser.add_argument('--start_epoch', default=0, type=int)
     parser.add_argument('--batch_size', default=1, type=int) #32
@@ -72,6 +73,7 @@ def get_args_parser():
     parser.add_argument('--multi_scale_training', default=False, type=bool)
     parser.add_argument('--training_scale_low', default=0.1, type=float)
     parser.add_argument('--training_scale_high', default=0.1, type=float)
+    parser.add_argument('--updsampling_threshold', default=-1, type=int)
 
     # model
     parser.add_argument('--multiview', default=True, type=bool)
@@ -86,12 +88,18 @@ def get_args_parser():
     parser.add_argument('--overwrite_imagenet', default=True, type=bool)
     parser.add_argument('--encoder_path', default='', type=str)
     parser.add_argument('--depth_fusion', default='Squeeze&Excite', type=str) #['Squeeze&Excite',  'Conv']
+    parser.add_argument('--fuse_layers', default=True, type=bool)
     parser.add_argument('--tf_layers', default=1, type=int) #['Squeeze&Excite',  'Conv']
     parser.add_argument('--multi_head_classification', default=True, type=bool)
     parser.add_argument('--rgbd_wise_multi_head', default=True, type=bool)
+    parser.add_argument('--rgbd_wise_mv_fusion', default=True, type=bool)
     parser.add_argument('--with_positional_encoding', default=False, type=bool)
     parser.add_argument('--learnable_pe', default=False, type=bool)
     parser.add_argument('--pc_embed_channels', default=64, type=int)
+    parser.add_argument('--pc_scale', default=200*math.pi, type=float)
+    parser.add_argument('--pc_temp', default=2000, type=float)
+    parser.add_argument('--use_weightNet', default=False, type=bool)
+    parser.add_argument('--freeze_weightnet', default=False, type=bool)
 
     # scheduler
     parser.add_argument('--one_cycle', default=True, type=bool)

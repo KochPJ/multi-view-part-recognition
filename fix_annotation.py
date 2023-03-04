@@ -110,17 +110,20 @@ if __name__ == '__main__':
 
     #print('sup', sup)
     print('#### Superclasses #####')
-    for k, v in sup.items():
-        print(k, v)
-
+    for i, (k, v) in enumerate(sup.items()):
+        print(i+1, k, v)
 
     #print('des', des)
 
     print('#### Descriptions #####')
+    counter = 1
+    c = 1
     for k, v in des.items():
-        print(k)
+        print(c, k)
+        c += 1
         for k2, v2 in v.items():
-            print('     {}: {}'.format(k2, v2))
+            print('     {} | {}: {}'.format(counter, k2, v2))
+            counter +=1
 
     sample_id = 0
 
