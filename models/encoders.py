@@ -78,9 +78,8 @@ def load_encoder_weights(args, encoder):
 
 
 def get_encoder(args):
-    if args.multiview:
+    if args.multiview or 'weight' in args.input_keys:
         out_channels = args.hidden_channels
-
     else:
         out_channels = args.num_classes
 

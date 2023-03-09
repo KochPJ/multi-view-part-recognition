@@ -197,10 +197,13 @@ class Dataset(data.Dataset):
 
         if 'meta' in self.load_keys:
             cls = self.samples[index]
-            cls = list(cls.values())[0]['cls']
+            if self.args.multiview:
+                cls = list(cls.values())[0]['cls']
+            else:
+                cls = cls['cls']
             meta = self.meta[cls]
             x['weight'] = torch.Tensor([meta['weight']])
-            x['size'] = torch.Tensor([meta['size']]) / 1000 # [150.0, 222.0, 157.0]
+            x['size'] = torch.Tensor([meta['size']]) / 1000# [150.0, 222.0, 157.0]
 
         if self.color_pre is not None:
             x = self.color_pre(x)
@@ -213,7 +216,16 @@ class Dataset(data.Dataset):
             if self.args.multiview:
                 x = {key: x[key] for key in self.input_keys}
             else:
-                x = {key: x[key][0] for key in self.input_keys}
+                #if 'weight' not in x:
+                #    print(self.load_keys, self.input_keys, index, x.keys())
+                if 'weight' in x:
+                    x = {key: x[key] for key in self.input_keys}
+                else:
+                    x = {key: x[key][0] for key in self.input_keys}
+
+                    #x['x'] = x['x'].unsqueeze(0)
+                    #x['weight'] = x['weight'].unsqueeze(0)
+                    #print(x['x'].shape)
 
         else:
             if isinstance(y, torch.Tensor):

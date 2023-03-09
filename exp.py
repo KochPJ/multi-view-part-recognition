@@ -8,20 +8,21 @@ import argparse
 if __name__ == '__main__':
     views_lut = {
         '1-a': ['9', '9'],
-        #'1-b': ['9', '1-6-9'],
-        #'1-c': ['9', '1-2-3-4-5-6-7-8-9-10'],
+        #'1': '9',
+        '1-b': ['9', '1-6-9'],
+        '1-c': ['9', '1-2-3-4-5-6-7-8-9-10'],
         #'2': '1-10',
         '3': '1-6-9',
-        '3-c': ['1-6-9', '1-6-9'],
-        #'3-b': ['1-6-9', '1-2-3-4-5-6-7-8-9-10'],
-        '2': '1-10',
-        '4': '1-3-8-10',
-        '5': '1-3-4-7-9',
-        '6': '1-3-2-4-7-9',
-        '7': '1-2-3-4-7-8-10',
-        '8': '1-2-3-4-7-8-9-10',
-        '9': '1-3-4-5-6-7-8-9-10',
-        '10': '1-2-3-4-5-6-7-8-9-10'
+        #'3-c': ['1-6-9', '1-6-9'],
+        '3-b': ['1-6-9', '1-2-3-4-5-6-7-8-9-10'],
+        #'2': '1-10',
+        #'4': '1-3-8-10',
+        #'5': '1-3-4-7-9',
+        #'6': '1-3-2-4-7-9',
+        #'7': '1-2-3-4-7-8-10',
+        #'8': '1-2-3-4-7-8-9-10',
+        #'9': '1-3-4-5-6-7-8-9-10',
+        #'10': '1-2-3-4-5-6-7-8-9-10'
     }
 
     data_views_list = [
@@ -37,7 +38,6 @@ if __name__ == '__main__':
     #views_lut = {
     #    '3': '1-6-9'
     #}
-    runs = 5
     main_view = '3' #3
 
     parser = argparse.ArgumentParser('MultiView training script', parents=[get_args_parser()])
@@ -49,17 +49,20 @@ if __name__ == '__main__':
     add_PE_exp = False
     add_weight_exp = False # True
     add_roi_crop_exp = False
-    add_view_exp = True #10
+    add_view_exp = False #10
+    add_view_exp_long = False # gleich
     add_depth_exp = False #True
     shuffle_all_views_exp = False
     add_pretrain_exp = False
+    add_pretrain_long_exp = False # gleich
     add_aug_exps = False
-    add_rotation_exps = True # True 12exps
-    add_dataviews_exps = True # True 8exps
+    add_rotation_exps = False # True 12exps
+    add_dataviews_exps = False # True 8exps
     add_random_view_order_exp = False #True
-    add_resize_exp = False
+    add_resize_exp = True
     add_lr_exp = False
     add_models_exp = False
+    add_max_pool_exp = False #gleich
     execute = True
 
     rots = [
@@ -87,8 +90,8 @@ if __name__ == '__main__':
     long_multiplier = 5.0
     num_epoch_multiplier = 0.5
     tf_layers = 1
-    runs = 23
-    run_start = 18 #3
+    runs = 25
+    run_start = 24 #3
     start_exp = 0 #3
     for run in range(run_start, runs):
         outdir_ = os.path.join(outdir, 'run{}'.format(str(run).zfill(3)))
@@ -104,6 +107,21 @@ if __name__ == '__main__':
                                                                                       args.model_version)), '1-b'],
                          [os.path.join(outdir_,
                                        '{}_{}_nr1-c_9/{}_{}_nr1-c_9_best.ckpt'.format(args.model_name,
+                                                                                      args.model_version,
+                                                                                      args.model_name,
+                                                                                      args.model_version)), '1-c']]
+        pretrain_path_long = [[os.path.join(outdir_,
+                                       '{}_{}_nr1-a_9/{}_{}_nr1-a_9_long_best.ckpt'.format(args.model_name,
+                                                                                      args.model_version,
+                                                                                      args.model_name,
+                                                                                      args.model_version)), '1-a'],
+                         [os.path.join(outdir_,
+                                       '{}_{}_nr1-b_9/{}_{}_nr1-b_9_long_best.ckpt'.format(args.model_name,
+                                                                                      args.model_version,
+                                                                                      args.model_name,
+                                                                                      args.model_version)), '1-b'],
+                         [os.path.join(outdir_,
+                                       '{}_{}_nr1-c_9/{}_{}_nr1-c_9_long_best.ckpt'.format(args.model_name,
                                                                                       args.model_version,
                                                                                       args.model_name,
                                                                                       args.model_version)), '1-c']]
@@ -136,12 +154,21 @@ if __name__ == '__main__':
                     #setattr(b, 'fusion', 'Conv')
                     #setattr(b, 'fusion', 'TransfomerEncoderDecoderMultiViewHead')
                     exps.append(b)
+                if add_view_exp_long:
+                    b = copy.deepcopy(a)
+                    #setattr(b, 'epochs', int(getattr(a, 'epochs') * num_epoch_multiplier))
+                    setattr(b, 'random_view_order', True)
+                    #setattr(b, 'fusion', 'Conv')
+                    #setattr(b, 'fusion', 'TransfomerEncoderDecoderMultiViewHead')
+                    setattr(b, 'name', '{}_{}'.format(getattr(b, 'name'), 'long'))
+                    exps.append(b)
 
                 if shuffle_all_views_exp and n != 1:
                     b = copy.deepcopy(a)
                     setattr(b, 'name', '{}_{}'.format(getattr(b, 'name'), 'shuffle'))
                     setattr(b, 'shuf_views', True)
                     exps.append(b)
+
             elif nr == main_view:
                 if add_resize_exp:
                     b = copy.deepcopy(a)
@@ -152,7 +179,7 @@ if __name__ == '__main__':
                     setattr(b, 'name', '{}_{}'.format(getattr(b, 'name'), 'aug_no-up'))
                     setattr(b, 'updsampling_threshold', getattr(b, 'width'))
                     setattr(b, 'multi_scale_training', False)
-                    exps.append(copy.deepcopy(b))
+                    #exps.append(copy.deepcopy(b))
 
                     b = copy.deepcopy(a)
                     setattr(b, 'name', '{}_{}'.format(getattr(b, 'name'), 'aug_new_res_no-up'))
@@ -161,15 +188,15 @@ if __name__ == '__main__':
                     setattr(b, 'multi_scale_training', False)
                     setattr(b, 'updsampling_threshold', new_res[0])
                     #setattr(b, 'batch_size', 14)
-                    exps.append(copy.deepcopy(b))
-
-                    #b = copy.deepcopy(a)
-                    #setattr(b, 'name', '{}_{}'.format(getattr(b, 'name'), 'aug_new_res_ms'))
-                    #setattr(b, 'width', new_res[0])
-                    #setattr(b, 'height', new_res[0])
-                    #setattr(b, 'multi_scale_training', True)
-                    #setattr(b, 'batch_size', 14)
                     #exps.append(copy.deepcopy(b))
+
+                    b = copy.deepcopy(a)
+                    setattr(b, 'name', '{}_{}'.format(getattr(b, 'name'), 'aug_new_res_ms'))
+                    setattr(b, 'width', new_res[0])
+                    setattr(b, 'height', new_res[0])
+                    setattr(b, 'multi_scale_training', True)
+                    setattr(b, 'batch_size', 14)
+                    exps.append(copy.deepcopy(b))
 
                 if add_models_exp:
                     for mn, mv in models:
@@ -201,6 +228,15 @@ if __name__ == '__main__':
                         b = copy.deepcopy(a)
                         setattr(b, 'name', '{}_{}'.format(getattr(b, 'name'), 'pretrained_{}'.format(path[1])))
                         setattr(b, 'encoder_path', path[0])
+                        setattr(b, 'multi_head_classification', False)
+                        exps.append(copy.deepcopy(b))
+
+                if add_pretrain_long_exp:
+                    for path in pretrain_path_long:
+                        b = copy.deepcopy(a)
+                        setattr(b, 'name', '{}_{}'.format(getattr(b, 'name'), 'long_pretrained_{}'.format(path[1])))
+                        setattr(b, 'encoder_path', path[0])
+                        setattr(b, 'fusion', 'max-pool')
                         setattr(b, 'multi_head_classification', False)
                         exps.append(copy.deepcopy(b))
 
@@ -251,6 +287,21 @@ if __name__ == '__main__':
                     setattr(b, 'flip_aug', False)
                     setattr(b, 'rotation_aug', False)
                     exps.append(b)
+
+                if add_max_pool_exp:
+                    b = copy.deepcopy(a)
+                    fusion = 'max-pool'
+                    setattr(b, 'fusion', fusion)
+                    setattr(b, 'hidden_channels', 308)
+                    setattr(b, 'random_view_order', True)
+                    setattr(b, 'multi_head_classification', False)
+                    setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'no-fc-fuse_{}'.format(fusion)))
+                    setattr(b, 'tf_layers', 0)
+                    exps.append(copy.deepcopy(b))
+                    setattr(b, 'multi_head_classification', True)
+                    setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'no-fc-fuse_{}-multihead'.format(fusion)))
+                    exps.append(copy.deepcopy(b))
+
 
                 if add_fusion_exp:
                     for fusion in ['Conv', 'max-pool', 'TransfomerEncoderDecoderMultiViewHead',
@@ -407,15 +458,23 @@ if __name__ == '__main__':
                         #setattr(b, 'epochs', int(getattr(a, 'epochs') * 2))
                         #setattr(b, 'lr_encoder', 1e-5)
                         #setattr(b, 'lr_fusion', 1e-4)
+
+
+
                         setattr(b, 'fusion', fusion)
                         setattr(b, 'tf_layers', 0)
-                        setattr(b, 'views', '1-10')
-                        setattr(b, 'data_views', '1-10')
-                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), '2Weight_TEDF'))
                         setattr(b, 'multi_head_classification', True)
+                        setattr(b, 'random_view_order', True)
+                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), '2RGB_TEDF'))
+                        exps.append(copy.deepcopy(b))
+
                         setattr(b, 'with_positional_encoding', True)
                         setattr(b, 'learnable_pe', True)
-                        setattr(b, 'random_view_order', True)
+                        setattr(b, 'input_keys', 'x-weight')
+                        setattr(b, 'load_keys', 'mask-x-weight-meta')
+                        #setattr(b, 'views', '1-10')
+                        #setattr(b, 'data_views', '1-10')
+                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), '2Weight_TEDF'))
                         setattr(b, 'enable_weight_input', 0.0)
                         setattr(b, 'use_weightNet', False)
                         setattr(b, 'freeze_weightnet', False)

@@ -57,7 +57,16 @@ def get_model(args):
             pass
         else:
             raise ValueError('Multiview model not implemented')
-
+    elif 'weight' in args.input_keys:
+        model = MultiView(model, args.num_classes, 1, __fusion__.get(args.fusion), args.tf_layers,
+                          multi_head_classification=args.multi_head_classification,
+                          with_positional_encoding=args.with_positional_encoding,
+                          learnable_pe=args.learnable_pe,
+                          pc_embed_channels=args.pc_embed_channels,
+                          use_weightnet=args.use_weightNet,
+                          pc_scale=args.pc_scale,
+                          pc_temp=args.pc_temp,
+                          freeze_weightnet=args.freeze_weightnet)
     return model
 
 #class MultiViewDepth(nn.Module):
@@ -72,7 +81,6 @@ class MultiView(nn.Module):
         self.encoder = encoder
         print('Multi view rgb multi_head_classification: {}'.format(multi_head_classification))
 
-
         args = [arg.name for arg in inspect.signature(fusion).parameters.values()]
         arg_dict = {'channels': encoder.out_channels,
                     'num_views': num_views,
@@ -86,7 +94,6 @@ class MultiView(nn.Module):
 
         args = {arg: arg_dict[arg] for arg in args if arg in arg_dict}
         self.multiViewFusion = fusion(**args)
-
 
         if tf_layers > 0:
             self.tf = __fusion__['Transformer'](encoder.out_channels, tf_layers)
@@ -110,7 +117,11 @@ class MultiView(nn.Module):
             self.weight_fusion1 = None
             self.weight_fusion2 = None
 
-        self.fc = nn.Linear(encoder.out_channels, num_classes)
+        if encoder.out_channels != num_classes:
+            self.fc = nn.Linear(encoder.out_channels, num_classes)
+        else:
+            print('not using final fc layer')
+            self.fc = None
 
         self.drop_out = nn.Dropout(p=dropout)
         self.drop_out2 = nn.Dropout(p=dropout)
@@ -125,9 +136,10 @@ class MultiView(nn.Module):
         x = x.view(bs * i, c, h, w)
         x = self.encoder(x)
 
-        x = self.norm(x)
-        if self.training:
-            x = self.drop_out(x)
+        if self.fc is not None:
+            x = self.norm(x)
+            if self.training:
+                x = self.drop_out(x)
 
         # get shape back again and flatten for each set
         x = x.view(bs, i, -1)
@@ -139,6 +151,7 @@ class MultiView(nn.Module):
                 multi[str(j)] = self.view_fc[j](x[:, j])
         else:
             multi = None
+
         if self.tf is not None:
             x = self.tf(x)
 
@@ -148,7 +161,7 @@ class MultiView(nn.Module):
         else:
             x = self.multiViewFusion(x)
 
-        if self.training:
+        if self.training and self.fc is not None:
             x = self.drop_out2(x)
 
         if weight is not None and self.cat_weight and not self.allows_weight:
@@ -158,7 +171,8 @@ class MultiView(nn.Module):
             #print(x.shape)
             x = self.weight_fusion2(self.weight_fusion1(x))
 
-        x = self.fc(x)
+        if self.fc is not None:
+            x = self.fc(x)
 
         if self.multi_head_classification:
             multi['out'] = x

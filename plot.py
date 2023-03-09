@@ -3,7 +3,7 @@ import json
 import numpy as np
 import matplotlib.pyplot as plt
 
-def plot_res(epxs, extr: '',  cut: '', exp_name='', lenght_wise=False, return_mean=False):
+def plot_res(epxs, extr: '',  cut: '', exp_name='', lenght_wise=False, return_mean=False, lut=None):
     if len(epxs) > 0:
 
         keys = sorted(epxs.keys())
@@ -11,7 +11,7 @@ def plot_res(epxs, extr: '',  cut: '', exp_name='', lenght_wise=False, return_me
             keys = sorted(keys, key=len)
 
         # fig, axs = plt.subplots(1, 1, constrained_layout=True)
-        accs, titles, stds, mins, maxs, ls = [], [], [], [], [], []
+        accs, titles, stds, mins, maxs, ls, alls = [], [], [], [], [], [], []
         train_loss_m = []
         train_loss_s = []
         valid_loss_m = []
@@ -30,14 +30,22 @@ def plot_res(epxs, extr: '',  cut: '', exp_name='', lenght_wise=False, return_me
         train_top5_s = []
         for i, name in enumerate(keys):
             v = epxs[name]
+            title = extr+name[len(cut):]
+            if lut is not None:
+                if title not in lut:
+                    continue
+                title = lut.get(title)
+
+            titles.append(title)
+
+
             accs.append(v['topk_test']['1']['m'])
             maxs.append(v['topk_test']['1']['max'])
             mins.append(v['topk_test']['1']['min'])
             stds.append(v['topk_test']['1']['s'])
             ls.append(v['topk_test']['1']['l'])
+            alls.append(v['topk_test']['1']['all'])
 
-            title = extr+name[len(cut):]
-            titles.append(title)
             r = '{} | '.format(title)
             for k, acc in v['topk_test']['1'].items():
                 r += '{}: {},'.format(k, acc)
@@ -60,35 +68,40 @@ def plot_res(epxs, extr: '',  cut: '', exp_name='', lenght_wise=False, return_me
             valid_top5_s.append(v['topk_valid']['5']['s'])
 
         print('###### {} results ####'.format('{} Exp results'.format(exp_name)))
-        for a, b, c, d, e, l in zip(titles, accs, stds, mins, maxs, ls):
-            print('{} | {} | mean: {}, std: {}, min: {}, max: {}'.format(l, a, b, c, d, e))
+        for a, b, c, d, e, l, f in zip(titles, accs, stds, mins, maxs, ls, alls):
+            print('{} | {} | mean: {}, std: {}, min: {}, max: {}, all: {}'.format(l, a, b, c, d, e, f))
         fig, axs = plt.subplots(1, 1, constrained_layout=True)
         fig.suptitle(exp_name, fontsize=16)
         axs.bar(titles, maxs)
         plt.xticks(rotation=45)
         plt.ylim(int(min(maxs)*0.9), 100)
 
-        fig, axs = plt.subplots(2, 4, constrained_layout=True)
+        fig, axs = plt.subplots(2, 2, constrained_layout=True)
         fig.suptitle('{} curves'.format(exp_name), fontsize=16)
 
         for i in range(len(train_loss_m)):
             # plt.fill_between(x, mean - std, mean + std, alpha=alpha)
             axs[0,0].plot(train_loss_m[i])
             axs[0,1].plot(train_top1_m[i])
-            axs[0,2].plot(train_top3_m[i])
-            axs[0,3].plot(train_top5_m[i])
+            #axs[0,2].plot(train_top3_m[i])
+            #axs[0,3].plot(train_top5_m[i])
             axs[1,0].plot(valid_loss_m[i])
             axs[1,1].plot(valid_top1_m[i])
-            axs[1,2].plot(valid_top3_m[i])
-            axs[1,3].plot(valid_top5_m[i])
+            #axs[1,2].plot(valid_top3_m[i])
+            #axs[1,3].plot(valid_top5_m[i])
         for i in range(8):
-            j = i//4
-            n = i%4
-            t = axis_titles[i]
-            axs[j, n].set_title(t)
-            axs[j, n].set_ylabel('CrossEntropy' if 'Loss' in t else 'Acc[%]')
-            axs[j, n].set_xlabel('Epochs')
-        plt.legend(titles)
+            try:
+                j = i//4
+                n = i%4
+                t = axis_titles[i]
+                axs[j, n].set_title(t)
+                axs[j, n].set_ylabel('CrossEntropy' if 'Loss' in t else 'Acc[%]')
+                axs[j, n].set_xlabel('Epochs')
+                axs[j, n].legend(titles)
+
+                #plt.legend(titles)
+            except:
+                pass
         return np.array(accs), np.array(stds)
 
 
@@ -165,7 +178,8 @@ if __name__ == '__main__':
                                         's': np.std(np.array(res[exp][key][k]), axis=0),
                                         'max': np.max(np.array(res[exp][key][k]), axis=0),
                                         'min': np.min(np.array(res[exp][key][k]), axis=0),
-                                        'l': len(res[exp][key][k])}
+                                        'l': len(res[exp][key][k]),
+                                        'all': np.array(res[exp][key][k])}
                     #try:
                     #except Exception as e:
                     #    #print(exp, key, res[exp][key][k].shape, np.array(res[exp][key][k]))
@@ -257,10 +271,22 @@ if __name__ == '__main__':
 
 
     #plot_res(depth_epxs, extr='', cut='ResNet_50_nr3_1-6-9_dfuse_', exp_name='Depth Fusion')
-    #plot_res(fusion_exps, extr='', cut='ResNet_50_nr3_1-6-9_fuse_', exp_name='MV Fusion')
+    fusion_lut = {
+        'Conv_no_TrFo': 'Conv',
+        'Conv_Tr': 'T + Conv',
+        'FC_no_TrFo': 'MLP',
+        'SharedSqueeze&Excite_no_TrFo': 'S.S.&E.',
+        'Squeeze&Excite_no_TrFo': 'S.&E.',
+        'maxl-pool_no_TrFo': 'MaxPool',
+        'mean_no_TrFo': 'Mean',
+        'TransfomerEncoderDecoderMultiViewHead_no_TrFo': 'Transformer Decoder',
+        'TransformerMultiViewHeadDecoder_no_TrFo': 'Transformer Encoder',
+    }
+
+    plot_res(fusion_exps, extr='', cut='ResNet_50_nr3_1-6-9_fuse_', exp_name='MV Fusion', lut=fusion_lut)
     plot_res(augs_exps, extr='', cut='ResNet_50_nr3_1-6-9_', exp_name='Aug')
     #plot_res(transformer_exps, extr='', cut='ResNet_50_nr', exp_name='Transformer')
-    #plot_res(single_exps, extr='', cut='ResNet_50_nr', exp_name='SingeView & Pretrained v3')
+    plot_res(single_exps, extr='', cut='ResNet_50_nr', exp_name='SingeView & Pretrained v3')
     #plot_res(v3, extr='', cut='ResNet_50_nr3_1-6-9_', exp_name='3V data views')
     #plot_res(allv, extr='', cut='ResNet_50_nr', exp_name='All Data Views')
     #plot_res(weight_exps, extr= '',  cut= 'ResNet_50_nr3_1-6-9_', exp_name='Weight')

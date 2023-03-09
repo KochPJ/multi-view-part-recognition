@@ -502,6 +502,7 @@ class TransfomerEncoderDecoderMultiViewHead(nn.Module):
                 query = self.weightNet(weight)
                 #print('querry from weight net')
             else:
+                #print(weight)
                 weight = get_pos_embed(weight, self.pc_embed_channels,
                                        scale=self.pc_scale, temperature=self.pc_temp).squeeze(1)
 
