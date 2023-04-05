@@ -7,3 +7,6 @@ new2/
 res_old/
 MVIP/*
 MVIP
+datasets
+datasets/*
+config*
