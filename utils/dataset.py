@@ -82,12 +82,11 @@ def get_dataset(args):
 
     return ds
 
-def get_LogicCube_dataset(args, json_path='./results/logiccube_dict.json'):
+def get_LogicCube_dataset(args, json_path='./results/logiccube_dict_logicNAS.json'):
     ds = {'train': {}, 'valid': {}}
-    # data_views = ['Cam-{}.png'.format(v.zfill(1)) for v in args.data_views.split('-')]
-    data_views = ['Cam-0.png','Cam-1.png', 'Cam-2.png', 'Cam-3.png', 'Cam-4.png', 'Cam-5.png', 'Cam-6.png', 'Cam-7.png', 'Cam-8.png']
-    # input_views = ['Cam-{}.png'.format(v.zfill(1)) for v in args.views.split('-')]
-    input_views = ['Cam-0.png','Cam-1.png', 'Cam-2.png', 'Cam-3.png', 'Cam-4.png']
+    data_views = ['Cam-{}.png'.format(v.zfill(1)) for v in args.data_views.split('-')]
+    input_views = ['Cam-{}.png'.format(v.zfill(1)) for v in args.views.split('-')]
+
     rotations = args.rotations.split('-')
 
     try:
@@ -98,42 +97,58 @@ def get_LogicCube_dataset(args, json_path='./results/logiccube_dict.json'):
                 # with open(os.path.join(args.path, cls, 'meta.json')) as f:
                 #     ds['meta'][cls] = json.load(f)
                 n_sample = 0
-                n_train_samples = 3
-                # for rotation in ['imageset1','imageset2','imageset3']:
+                n_train_samples = len(args.rotations.split('-'))-1
+
                 for rotation in os.listdir(os.path.join(args.path, cls)):
 
                     tdir = os.path.join(args.path, cls, rotation)
 
-                    for ts in os.listdir(tdir):
-                        sample = {}
-                        sdir = os.path.join(tdir, ts)
+                    sample = {}
+                    if n_sample < n_train_samples:
                         for v in os.listdir(tdir):
-                            if v in input_views:
+                            if v in data_views:
                                 _, v_id = v.split('-')
                                 v_id, png = v_id.split('.')
-                                sample[v_id] = {
-                                    'rgb': sdir,
+                                sample[v_id.zfill(2)] = {
+                                    'rgb': os.path.join(tdir,v),
                                     # 'mask': os.path.join(sdir, v, '{}_rgb_mask_gen.png'.format(v_id)),
                                     # 'depth': os.path.join(sdir, v, '{}_depth.png'.format(v_id)),
                                     # 'rgb_mean': os.path.join(sdir, v, '{}_rgb_mean.png'.format(v_id)),
                                     # 'mask_mean': os.path.join(sdir, v, '{}_rgb_mean_mask_gen.png'.format(v_id)),
                                     # 'depth_mean': os.path.join(sdir, v, '{}_depth_mean.png'.format(v_id)),
                                     # 'meta': os.path.join(sdir, v, '{}_meta.json'.format(v_id)),
-                                    'rot': v,
-                                    'view': v,
+                                    'rot': v_id.zfill(2),
+                                    'view': v_id.zfill(2),
                                     # 'hha': os.path.join(sdir, v, '{}_hha.png'.format(v_id))
                                 }
 
                         if args.multiview:
-                            if n_sample < n_train_samples:
-                                ds['train'][cls].append(sample)
-                            else:
-                                ds['valid'][cls].append(sample)
+                            ds['train'][cls].append(sample)
                         else:
-                            if n_sample < n_train_samples:
-                                ds['train'][cls] += list(sample.values())
-                            else:
-                                ds['valid'][cls] += list(sample.values())
+                            ds['train'][cls] += list(sample.values())
+
+                    else:
+                        for v in os.listdir(tdir):
+                            if v in input_views:
+                                _, v_id = v.split('-')
+                                v_id, png = v_id.split('.')
+                                sample[v_id.zfill(2)] = {
+                                    'rgb': os.path.join(tdir, v),
+                                    # 'mask': os.path.join(sdir, v, '{}_rgb_mask_gen.png'.format(v_id)),
+                                    # 'depth': os.path.join(sdir, v, '{}_depth.png'.format(v_id)),
+                                    # 'rgb_mean': os.path.join(sdir, v, '{}_rgb_mean.png'.format(v_id)),
+                                    # 'mask_mean': os.path.join(sdir, v, '{}_rgb_mean_mask_gen.png'.format(v_id)),
+                                    # 'depth_mean': os.path.join(sdir, v, '{}_depth_mean.png'.format(v_id)),
+                                    # 'meta': os.path.join(sdir, v, '{}_meta.json'.format(v_id)),
+                                    'rot': v_id.zfill(2),
+                                    'view': v_id.zfill(2),
+                                    # 'hha': os.path.join(sdir, v, '{}_hha.png'.format(v_id))
+                                }
+
+                        if args.multiview:
+                            ds['valid'][cls].append(sample)
+                        else:
+                            ds['valid'][cls] += list(sample.values())
 
                     n_sample = n_sample + 1
                     # print('trainingsamples ' + cls)
@@ -143,9 +158,9 @@ def get_LogicCube_dataset(args, json_path='./results/logiccube_dict.json'):
 
             return ds
         else:
-            with open('./results/logiccube_dict.json') as f:
+            with open(json_path,'r') as f:
                 ds = json.load(f)
-            return  ds
+            return ds
     except FileNotFoundError:
         print('File not found in '+ cls + ' ' + rotation)
         return  None
@@ -245,20 +260,6 @@ class Dataset(data.Dataset):
                 Normalize(mean=None, std=None, depth_mean=depth_mean, depth_std=depth_std,
                           norm_depth=self.args.norm_depth if not self.args.depth2hha else False)
             ])
-
-        # if 'depth' in self.load_keys:
-        #     depth_mean = args.depth_mean if not args.depth2hha else [float(d) for d in args.depth_mean_hha.split('-')]
-        #     depth_std = args.depth_std if not args.depth2hha else [float(d) for d in args.depth_std_hha.split('-')]
-        #
-        #     self.tensor_pre = transforms.Compose([
-        #         ToTensor(args.depth2hha),
-        #         Normalize(mean=None, std=None, depth_mean=depth_mean, depth_std=depth_std,
-        #                   norm_depth=self.args.norm_depth if not self.args.depth2hha else False)
-        #     ])
-        #     print('{} |Tensor transforms: {}'.format(mode, self.tensor_pre))
-        # else:
-        #     self.tensor_pre = transforms.Compose([ToTensor(args.depth2hha), Normalize(mean=None, std=None, depth_mean=None, depth_std=None,
-        #                   norm_depth=None) ])
 
         self.checking_batch_size = False
         self.batch_size = args.batch_size
@@ -432,7 +433,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser('MultiView training script', parents=[get_args_parser()])
     args = parser.parse_args()
 
-    setattr(args,'path', '/mnt/logicNAS/DataSets/mtu_cropped/')
+    setattr(args,'path', './datasets/mtu_cropped/')
     setattr(args, 'depth2hha', False)
     #setattr(args, 'norm_depth', True)
     #setattr(args, 'depth_mean', None)
@@ -442,17 +443,19 @@ if __name__ == '__main__':
     setattr(args, 'input_keys', 'x')
     setattr(args, 'load_keys', 'x')
     setattr(args, 'data_views', '1-2-3-4-5-6-7-8')
-    setattr(args, 'views', '1-2-3-4-5-6-7-8')
+    setattr(args, 'views', '0-2-4')
+    setattr(args,'rotations','imageset1-imageset2-imageset3')
+
     # ds = get_dataset(args)
-    # ds = get_LogicCube_dataset(args,json_path=None) # renew dataset
-    ds = get_LogicCube_dataset(args)
+    ds = get_LogicCube_dataset(args,json_path=None) # renew dataset
+    # ds = get_LogicCube_dataset(args)
     classes = sorted(list(ds['train'].keys()))
 
     save_file = False
     if save_file:
         json_file = json.dumps(ds)
 
-        f = open('./results/logiccube_dict.json', 'w')
+        f = open('./results/logiccube_0-2.json', 'w')
         f.write(json_file)
         f.close()
 

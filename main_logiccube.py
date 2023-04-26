@@ -3,7 +3,7 @@ import numpy as np
 import json
 import os
 import argparse
-from utils.dataset import get_dataset, Dataset
+from utils.dataset import get_dataset, get_LogicCube_dataset, Dataset
 import torch.nn as nn
 from models.multiview import get_model
 import torch.optim.lr_scheduler as schedulers
@@ -18,11 +18,12 @@ def get_args_parser():
     parser = argparse.ArgumentParser('Set MultiView', add_help=False)
 
     # training
-    parser.add_argument('--name', default='ResNet_34_nr3_1_6_9-res512-ms', type=str)
+    # parser.add_argument('--name', default='ResNet_34_nr3_1_6_9-res512-ms', type=str)
+    parser.add_argument('--name', default='resnet50-logiccube_0-2_256x256.pth', type=str)
     parser.add_argument('--outdir', default='./results', type=str)
     parser.add_argument('--epochs', default=100, type=int) #100
     parser.add_argument('--start_epoch', default=0, type=int)
-    parser.add_argument('--batch_size', default=32, type=int) #32
+    parser.add_argument('--batch_size', default=64, type=int) #32
     parser.add_argument('--num_workers', default=34, type=int) #34
     parser.add_argument('--device', default='cuda:0', type=str)
     parser.add_argument('--multi_gpu', default=True, type=bool)
@@ -39,9 +40,10 @@ def get_args_parser():
 
     # metrics
     parser.add_argument('--topk', default='1-3-5', type=str)
+    # parser.add_argument('--topk', default='0-2-4-6', type=str)
 
     # dataset
-    parser.add_argument('--path', default='/mnt/logicNAS/DataSets/mtu_cropped/', type=str)
+    parser.add_argument('--path', default='./datasets/mtu_cropped/', type=str)
     parser.add_argument('--roicrop', default=False, type=bool)
     parser.add_argument('--shuf_views', default=False, type=bool)
     parser.add_argument('--shuf_views_cw', default=False, type=bool)
@@ -50,8 +52,8 @@ def get_args_parser():
     parser.add_argument('--shuf_views_vw', default=True, type=bool)
     parser.add_argument('--p_shuf_cw', default=1.0, type=float)
     parser.add_argument('--p_shuf_vw', default=1.0, type=float)
-    parser.add_argument('--data_views', default='1-2-3-4-5-6-7-8', type=str) #1-6-9 #1-2-3-4-5-6-7-8-9-10
-    parser.add_argument('--views', default='1-2-5-7', type=str) #1-6-9
+    parser.add_argument('--data_views', default='0-1-2-3-4-5-6-7-8', type=str) #1-6-9 #1-2-3-4-5-6-7-8-9-10
+    parser.add_argument('--views', default='0-2', type=str) #1-6-9 #1-2-5-7 #0-1-2-3-4 # 0-2-4-6
     parser.add_argument('--random_view_order', default=False, type=bool)
     parser.add_argument('--rotations', default='imageset1-imageset2-imageset3-imageset4', type=str) # Errorotenzial
     parser.add_argument('--input_keys', default='x', type=str) # x
@@ -67,8 +69,8 @@ def get_args_parser():
     parser.add_argument('--depth2hha', default=False, type=bool)
     parser.add_argument('--rotation_aug', default=True, type=bool)
     parser.add_argument('--flip_aug', default=True, type=bool)
-    parser.add_argument('--width', default=224, type=int)
-    parser.add_argument('--height', default=224, type=int)
+    parser.add_argument('--width', default=256, type=int)
+    parser.add_argument('--height', default=256, type=int)
     parser.add_argument('--multi_scale_training', default=False, type=bool)
     parser.add_argument('--training_scale_low', default=0.1, type=float)
     parser.add_argument('--training_scale_high', default=0.1, type=float)
@@ -126,8 +128,8 @@ def main(args):
     else:
         cp = None
 
-    ds = get_dataset(args)
-
+    ds = get_LogicCube_dataset(args, None)
+    # ds = get_LogicCube_dataset(args, './results/logiccube_0-2.json')
     if args.shuf_views and not args.shuf_views_cw and args.p_shuf_cw == -1:
         args.p_shuf_cw = float(1.0/len(args.views.split('-')))
         print('Shuffle class wise with p={}'.format(args.p_shuf_cw))
@@ -139,7 +141,7 @@ def main(args):
     # modes = ['train', 'valid', 'test']
     modes = ['train', 'valid']
     classes = sorted(list(ds['train'].keys()))
-    datasets = {mode: Dataset(args, ds[mode], ds['meta'], mode=mode, classes=classes) for mode in modes}
+    datasets = {mode: Dataset(args, ds[mode], mode=mode, classes=classes) for mode in modes}
     args.num_classes = datasets['train'].num_classes
     print('number of classes: {}'.format(args.num_classes))
 
@@ -400,6 +402,7 @@ def main(args):
                          logs['losses_train'][-1],
                          logs['topk_train'][bestk][-1],
                          times, bestk)
+            # break
         print('\n')
 
         for k, m in metrics.items():
@@ -533,67 +536,70 @@ def main(args):
         model = nn.DataParallel(model)
     model = model.to(device)
 
-    print('##### Run Test #####')
-    model.eval()
-    losses = []
-    t_step = time.time()
-    for step, (x, y) in enumerate(dataloader['test']):
-        #if step == 4:
-        #    break
-        for key in x:
-            x[key] = x[key].to(device)
+    if 'test' in modes:
+        print('##### Run Test #####')
+        model.eval()
+        losses = []
+        t_step = time.time()
+        for step, (x, y) in enumerate(dataloader['test']):
+            #if step == 4:
+            #    break
+            for key in x:
+                x[key] = x[key].to(device)
 
-        if isinstance(y, dict):
-            for key in y:
-                y[key] = y[key].to(device)
-        else:
-            y = y.to(device)
-
-        with torch.no_grad():
-            pred = model(**x)
-
-        if isinstance(pred, dict):
-            if binary_cross:
-                bi_c_loss = []
-                for bi_key, bi_pred in pred.items():
-                    for bi_y in y.keys():
-                        if bi_y in bi_key:
-                            bi_c_loss.append(criterion(bi_pred, y[bi_y]))
-                            break
-                loss = sum(bi_c_loss) / len(bi_c_loss)
-                y = y['out']
+            if isinstance(y, dict):
+                for key in y:
+                    y[key] = y[key].to(device)
             else:
-                loss = sum([criterion(pred_, y) for pred_ in pred.values()]) / len(pred)
-            pred = pred['out']
-        else:
-            loss = criterion(pred, y)
+                y = y.to(device)
 
-        losses.append(float(loss.item()))
+            with torch.no_grad():
+                pred = model(**x)
+
+            if isinstance(pred, dict):
+                if binary_cross:
+                    bi_c_loss = []
+                    for bi_key, bi_pred in pred.items():
+                        for bi_y in y.keys():
+                            if bi_y in bi_key:
+                                bi_c_loss.append(criterion(bi_pred, y[bi_y]))
+                                break
+                    loss = sum(bi_c_loss) / len(bi_c_loss)
+                    y = y['out']
+                else:
+                    loss = sum([criterion(pred_, y) for pred_ in pred.values()]) / len(pred)
+                pred = pred['out']
+            else:
+                loss = criterion(pred, y)
+
+            losses.append(float(loss.item()))
+            for k, m in metrics.items():
+                m.add(pred, y)
+
+            t = time.time()
+            times['test'].append(t - t_step)
+            t_step = t
+            if len(times['test']) > args.time_max:
+                times['test'] = times['test'][1:]
+            try:
+                bar_progress('test', args.epochs, step + 1, steps, None, float(loss.item()),
+                             metrics[bestk].result(),
+                             None,
+                             None,
+                             times, bestk)
+            except:
+                pass
+        print('\n')
+
+        print('##### Test Results ######')
         for k, m in metrics.items():
-            m.add(pred, y)
-
-        t = time.time()
-        times['test'].append(t - t_step)
-        t_step = t
-        if len(times['test']) > args.time_max:
-            times['test'] = times['test'][1:]
-        try:
-            bar_progress('test', args.epochs, step + 1, steps, None, float(loss.item()),
-                         metrics[bestk].result(),
-                         None,
-                         None,
-                         times, bestk)
-        except:
-            pass
-    print('\n')
-
-    print('##### Test Results ######')
-    for k, m in metrics.items():
-        logs['topk_test'][k] = m.result()
-        print('Test top {}: {}%'.format(k, float(np.round(logs['topk_test'][k], 3))))
-    logs['acc_test'] = metrics[bestk].result()
-    logs['loss_test'] = float(np.mean(losses))
-    print('Test loss: {}'.format(logs['loss_test']))
+            logs['topk_test'][k] = m.result()
+            print('Test top {}: {}%'.format(k, float(np.round(logs['topk_test'][k], 3))))
+        logs['acc_test'] = metrics[bestk].result()
+        logs['loss_test'] = float(np.mean(losses))
+        print('Test loss: {}'.format(logs['loss_test']))
+    else:
+        print('######## Test was skipped #########')
 
     with open(logs_dir, 'w') as f:
         json.dump(logs, f)

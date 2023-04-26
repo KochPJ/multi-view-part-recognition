@@ -7,12 +7,28 @@ from utils.stuff import lookup
 def get_args_parser():
     parser = argparse.ArgumentParser('Plot multi view results', add_help=False)
 
-    parser.add_argument('--outdir', default='./results', type=str)
+    # parser.add_argument('--outdir', default='./results/run025', type=str)
+    #
     # training
     #parser.add_argument('--name', default='ResNet_34_nr3_1-6-9_fuse_Squeeze&Excite', type=str)
     #parser.add_argument('--name', default='ResNet_34_nr3_1-6-9_fuse_Conv', type=str)
     #parser.add_argument('--name', default='ResNet_34_nr3_1-6-9_fuse_FC', type=str)
-    parser.add_argument('--name', default='ResNet_34_nr3_1-6-9_pretrained_1-a', type=str)
+    # parser.add_argument('--name', default='ResNet_34_nr3_1-6-9_pretrained_1-a', type=str)
+    # parser.add_argument('--name', default='resnet50-logiccube_0-1-2-3-4_256x256.pth', type=str)
+    # parser.add_argument('--name', default='resnet50-logiccube_0-2-4-6_256x256.pth', type=str)
+    # parser.add_argument('--name', default='resnet50-logiccube_0-2_256x256.pth', type=str)
+    # parser.add_argument('--name', default='ResNet_50_nr1-a_4', type=str)
+    # parser.add_argument('--name', default='ResNet_50_nr1-b_4', type=str)
+    # parser.add_argument('--name', default='ResNet_50_nr1-c_4', type=str)
+    # parser.add_argument('--name', default='ResNet_50_nr3-b_0-4-6', type=str)
+
+    # No 25
+    parser.add_argument('--outdir', default='./results/run025', type=str)
+    parser.add_argument('--name', default='ResNet_50_nr3_0-4-6_dataviews_exp09', type=str)
+
+    # No 26
+    # parser.add_argument('--outdir', default='./results/run026', type=str)
+    # parser.add_argument('--name', default='ResNet_50_nr3_0-4-6_rota_exp02', type=str)
 
     #parser.add_argument('--name', default='ResNet_34_nr3_1-6-9_fuse_SharedSqueeze&Excite', type=str)
 

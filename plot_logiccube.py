@@ -108,8 +108,8 @@ def plot_res(epxs, extr: '',  cut: '', exp_name='', lenght_wise=False, return_me
 if __name__ == '__main__':
     root = './results'
     ks = ['1', '3', '5']
-    args = ['tf_layers', 'multi_head_classification', 'fusion', 'data_views']
-    args = ['tf_layers', 'multi_head_classification', 'fusion', 'data_views']
+    # args = ['tf_layers', 'multi_head_classification', 'fusion', 'data_views']
+    args =  ['view', 'data_views','rotation']
     res = {}
     min_run = 24 # 8
     runs = sorted([d for d in os.listdir(root) if 'run' in d])
@@ -123,10 +123,10 @@ if __name__ == '__main__':
             except Exception as e:
                 print(exp, e)
                 continue
-
-            # if 'ResNet_50_nr3_1-6-9_fuse_' in exp and False:
-            if 'ResNet_50_nr3_0-4-6' in exp and False:
-                print(exp[len('ResNet_50_nr3_0-4-6'):])
+            logs['topk_test'] = logs['topk_valid']
+            logs['loss_test'] = logs['losses_valid']
+            if 'ResNet_50_nr3_0-4-6_' in exp and False:
+                print(exp[len('RResNet_50_nr3_0-4-6_'):])
                 for arg in args:
                     print('     ',arg, logs['args'][arg])
             if 'normal' in exp and False:
@@ -288,7 +288,7 @@ if __name__ == '__main__':
     plot_res(fusion_exps, extr='', cut='ResNet_50_nr3_1-6-9_fuse_', exp_name='MV Fusion', lut=fusion_lut)
     plot_res(augs_exps, extr='', cut='ResNet_50_nr3_1-6-9_', exp_name='Aug')
     #plot_res(transformer_exps, extr='', cut='ResNet_50_nr', exp_name='Transformer')
-    plot_res(single_exps, extr='', cut='ResNet_50_nr', exp_name='SingeView & Pretrained v3')
+    # plot_res(single_exps, extr='', cut='ResNet_50_nr', exp_name='SingeView & Pretrained v3')
     #plot_res(v3, extr='', cut='ResNet_50_nr3_1-6-9_', exp_name='3V data views')
     #plot_res(allv, extr='', cut='ResNet_50_nr', exp_name='All Data Views')
     #plot_res(weight_exps, extr= '',  cut= 'ResNet_50_nr3_1-6-9_', exp_name='Weight')
