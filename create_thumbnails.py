@@ -1,3 +1,5 @@
+import copy
+
 from utils.preprocesses import RoiCrop, Resize
 import os
 from PIL import Image
@@ -15,18 +17,22 @@ if __name__ == '__main__':
     dpi = 600
     resize = Resize(height=m, width=m)
     root = '/mnt/HDD/industrial_part_recognition'
-    classes = [d for d in os.listdir(root) if os.path.isdir(os.path.join(root, d))]
+    classes = sorted([d for d in os.listdir(root) if os.path.isdir(os.path.join(root, d))] )
     print(classes)
 
-
+    start = 0
     for count, cls in enumerate(classes):
-        path = '/mnt/share/more_datasets/MVIP/sets/{}/train_data/0/0/'.format(cls)
-        out = '/home/kochpaul/images3'
+        if count < start:
+            continue
+
+        out = '/home/kochpaul/MVIPThumb'
         print('{}/{} | {}'.format(count+1, len(classes), cls))
 
         ns = [10]
+        path = '/mnt/share/more_datasets/MVIP/sets/{}/train_data/0/0/'.format(cls)
+
         views_ = sorted(list(os.listdir(path)))
-        #random.shuffle(views_)
+        random.shuffle(views_)
         print(views_)
 
         '''
@@ -77,8 +83,8 @@ if __name__ == '__main__':
 
         #xx = [1, 2]
         #yy = [10, 2]
-        xx = [1]
-        yy = [10]
+        xx = [2]
+        yy = [2]
 
         for x, y in zip(xx, yy):
 
@@ -124,6 +130,8 @@ if __name__ == '__main__':
                 op = os.path.join(out, '{}_{}.png'.format(cls, k))
 
             plt.savefig(op, bbox_inches='tight', pad_inches=0, dpi=dpi)
+            del img
+            plt.cla()
 
 
 

@@ -160,8 +160,8 @@ class Dataset(data.Dataset):
                 augs.append(RandomNoise())
             if 'depth' in args.input_keys and not args.depth2hha:
                 augs.append(DepthNoise())
-
             self.augs = transforms.Compose(augs)
+
         print('{} |Augmentation transforms: {}'.format(mode, self.augs))
         self.multi_scale = args.multi_scale_training if not self.eval else False
         self.color_pre = transforms.Compose([
@@ -173,7 +173,6 @@ class Dataset(data.Dataset):
 
         depth_mean = args.depth_mean if not args.depth2hha else [float(d) for d in args.depth_mean_hha.split('-')]
         depth_std = args.depth_std if not args.depth2hha else [float(d) for d in args.depth_std_hha.split('-')]
-
 
         print('{} |Color transforms: {}'.format(mode, self.color_pre))
         self.tensor_pre = transforms.Compose([
