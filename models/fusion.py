@@ -10,6 +10,7 @@ from utils.stuff import load_fitting_state_dict
 
 
 
+
 class WeightNet(nn.Module):
     def __init__(self, num_classes: int, out_channels: int, pc_embed_channels: int = 64, pc_scale=200*math.pi,
                  with_fc=True, pc_temp=2000):
@@ -44,6 +45,56 @@ class WeightNet(nn.Module):
                 weight = self.drop(weight)
             weight = self.fc(weight)
         return weight
+
+
+
+class PropertyNet(nn.Module):
+    def __init__(self, num_classes: int, out_channels: int, pc_embed_channels: int = 64,  num_properties: int = 4,
+                 pc_scale=200*math.pi, with_fc=True, pc_temp=2000):
+        super(PropertyNet, self).__init__()
+        self.num_properties = num_properties
+
+        self.in_channels = num_properties*pc_embed_channels
+        #print(self.num_properties, 'num_properties')
+        #print(self.in_channels, 'in_channels')
+
+        self.property_fusion = nn.Sequential(
+            nn.Linear(self.in_channels, self.in_channels * 2),
+            nn.Linear(self.in_channels * 2, self.in_channels * 2),
+            nn.Linear(self.in_channels * 2, self.in_channels * 2),
+            nn.Linear(self.in_channels * 2, out_channels),
+            nn.Linear(out_channels, out_channels),
+        )
+
+        self.with_fc = with_fc
+        if self.with_fc:
+            self.fc = nn.Linear(out_channels, num_classes)
+            self.drop = nn.Dropout(0.5)
+            self.out_channels = num_classes
+        else:
+            self.drop = None
+            self.fc = None
+            self.out_channels = out_channels
+
+        self.pc_embed_channels = pc_embed_channels
+        self.pc_scale = pc_scale
+        self.pc_temp = pc_temp
+
+    def forward(self, property):
+        #print(property.shape, 1)
+        property = get_pos_embed(property, self.pc_embed_channels, scale=self.pc_scale,
+                                 temperature=self.pc_temp).squeeze(1)
+        #print(property.shape, 2)
+        #property = property.view(len(property), -1)
+        property = property.flatten(1)
+
+        #print(property.shape, 2)
+        property = self.property_fusion(property)
+        if self.fc is not None:
+            if self.training:
+                property = self.drop(property)
+            property = self.fc(property)
+        return property
 
 
 class MaxPool(nn.Module):
@@ -318,9 +369,8 @@ class Attention(nn.Module):
         out = rearrange(out, 'b h n d -> b n (h d)')
         return self.to_out(out)
 
-
 class Transformer(nn.Module):
-    def __init__(self, dim, depth, heads, dim_head, mlp_dim, dropout=0.):
+    def __init__(self, dim=512, depth=1, heads=8, dim_head=64, mlp_dim=2048, dropout=0.1):
         super().__init__()
         self.layers = nn.ModuleList([])
         for _ in range(depth):
@@ -346,8 +396,8 @@ class TransformerMultiViewHead(nn.Module):
         self.pc_embed_channels = pc_embed_channels
         self.pc_temp = pc_temp
         self.pc_scale = pc_scale
-        #self.tf = Transformer(channels, layers, heads, channels, channels)
-        self.tf = TransformerEncoderHead(d_model=channels, nhead=heads, num_encoder_layers=layers)
+        self.tf = Transformer(channels, layers, heads, channels, channels)
+        #self.tf = TransformerEncoderHead(d_model=channels, nhead=heads, num_encoder_layers=layers)
         if self.with_positional_encoding:
             if self.learnable_pe:
                 self.pos_emb = nn.Embedding(self.num_views, self.channels)
@@ -431,8 +481,9 @@ class TransformerMultiViewHeadDecoder(nn.Module):
 class TransfomerEncoderDecoderMultiViewHead(nn.Module):
     def __init__(self, channels, num_views, layers=1, heads=8, dim_feedforward=2048, activation="relu",
                  normalize_before=False, return_intermediate_dec=False, with_positional_encoding=True,
-                 pc_embed_channels=64, learnable_pe=False, use_weightnet=False, pc_temp=2000, pc_scale=200*math.pi,
-                 freeze_weightnet=False):
+                 pc_embed_channels=64, learnable_pe=False, use_weightnet=False, use_propertyNet=False,
+                 pc_temp=2000, pc_scale=200*math.pi,
+                 freeze_propertynet=False):
         super().__init__()
         self.tf = TransformerEncoderDecoder(d_model=channels, nhead=heads, num_encoder_layers=layers,
                                             num_decoder_layers=layers, dim_feedforward=dim_feedforward,
@@ -460,26 +511,41 @@ class TransfomerEncoderDecoderMultiViewHead(nn.Module):
         else:
             self.pos_emb = None
 
+        self.contionalizer = None
         self.use_weightnet = use_weightnet
-        self.freeze_weightnet = freeze_weightnet
-        if self.use_weightnet:
-            weightet_path = '/home/kochpaul/git/multi-view-part-recognition/results/run100/WeightNet10000/WeightNet10000_best.ckpt'
-            sd = torch.load(weightet_path, map_location='cpu')['state_dict']
-            #print(sd.keys())
+        self.use_propertyNet = use_propertyNet
+        self.freeze_propertynet = freeze_propertynet
+        print('here', use_weightnet, use_propertyNet)
+        if self.use_weightnet or self.use_propertyNet:
 
-            self.weightNet = WeightNet(0, channels, with_fc=False, pc_scale=self.pc_scale, pc_temp=self.pc_temp,
+            if use_weightnet:
+                weightet_path = '/home/kochpaul/git/multi-view-part-recognition/results/run100/' \
+                                'WeightNet10000/WeightNet10000_best.ckpt'
+                sd = torch.load(weightet_path, map_location='cpu')['state_dict']
+                self.contionalizer = WeightNet(0, channels, with_fc=False, pc_scale=self.pc_scale, pc_temp=self.pc_temp,
                                        pc_embed_channels=self.pc_embed_channels)
-            self.weightNet = load_fitting_state_dict(self.weightNet, sd)
+                self.contionalizer = load_fitting_state_dict(self.contionalizer, sd)
+                print('loaded pretrained weightnet')
 
-            if self.freeze_weightnet:
-                for param in self.weightNet.parameters():
+            elif use_propertyNet:
+                #propertynet_path = '/home/kochpaul/git/multi-view-part-recognition/results/run100/' \
+                #                   'PropertyNet/PropertyNet_best.ckpt'
+                propertynet_path = '/home/kochpaul/git/multi-view-part-recognition/results/run100/' \
+                                   'PropertyNet_with_random/PropertyNet_with_random_best.ckpt'
+                sd = torch.load(propertynet_path, map_location='cpu')['state_dict']
+                self.contionalizer = PropertyNet(0, channels, with_fc=False, pc_scale=self.pc_scale, pc_temp=self.pc_temp,
+                                               pc_embed_channels=self.pc_embed_channels)
+                self.contionalizer = load_fitting_state_dict(self.contionalizer, sd)
+                print('loaded pretrained propertynet')
+
+            if self.freeze_propertynet:
+                for param in self.contionalizer.parameters():
                     param.requires_grad = False
                 #for param in self.weightNet.parameters():
                 #    print(param.requires_grad)
 
             self.query_emb = None
         else:
-            self.weightNet = None
             self.query_emb = nn.Embedding(1, self.channels)
         self.reset_parameters()
 
@@ -487,7 +553,8 @@ class TransfomerEncoderDecoderMultiViewHead(nn.Module):
         if self.with_positional_encoding and self.learnable_pe:
             nn.init.uniform_(self.pos_emb.weight)
 
-    def __call__(self, x, weight=None):
+    def __call__(self, x, conditions=None):
+        #print(x.shape, conditions.shape)
 
         if self.pos_emb is not None:
             if self.learnable_pe:
@@ -497,22 +564,22 @@ class TransfomerEncoderDecoderMultiViewHead(nn.Module):
         else:
             pos_embed = None
 
-        if weight is not None:
-            if self.weightNet is not None:
-                query = self.weightNet(weight)
+        if conditions is not None:
+            if self.contionalizer is not None:
+                query = self.contionalizer(conditions)
                 #print('querry from weight net')
             else:
                 #print(weight)
-                weight = get_pos_embed(weight, self.pc_embed_channels,
-                                       scale=self.pc_scale, temperature=self.pc_temp).squeeze(1)
-
+                conditions = get_pos_embed(conditions, self.pc_embed_channels,
+                                       scale=self.pc_scale, temperature=self.pc_temp).flatten(1).squeeze(1)
+                #print(conditions.shape)
                 query = self.query_embed.weight.repeat(len(x), 1)
-                query[:, :self.pc_embed_channels] = weight
+                #print(query.shape)
+                query[:, :conditions.shape[-1]] += conditions
                 #print('weight added to querry')
         else:
             query = self.query_embed.weight.repeat(len(x), 1)
             #print('querry pure')
-
 
         out, _ = self.tf(x, None, query, pos_embed)
         return out.squeeze(1)

@@ -157,7 +157,7 @@ class Dataset(data.Dataset):
             if args.rotation_aug:
                 augs.append(RandomRotation())
             if args.enable_weight_input >= 0:
-                augs.append(RandomNoise())
+                augs.append(RandomNoise(disable=0.1 if 'size' in self.input_keys else 0.0))
             if 'depth' in args.input_keys and not args.depth2hha:
                 augs.append(DepthNoise())
             self.augs = transforms.Compose(augs)
@@ -202,7 +202,7 @@ class Dataset(data.Dataset):
                 cls = cls['cls']
             meta = self.meta[cls]
             x['weight'] = torch.Tensor([meta['weight']])
-            x['size'] = torch.Tensor([meta['size']]) / 1000# [150.0, 222.0, 157.0]
+            x['size'] = torch.Tensor([meta['size']]).sort().values / 1000# [150.0, 222.0, 157.0]
 
         if self.color_pre is not None:
             x = self.color_pre(x)

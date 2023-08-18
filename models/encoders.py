@@ -63,6 +63,7 @@ def check_encoder(args, d):
         ))
 
 def load_encoder_weights(args, encoder):
+    print('args.encoder_path', args.encoder_path)
     if args.encoder_path:
         if os.path.exists(args.encoder_path):
             weights = torch.load(args.encoder_path)['state_dict']
@@ -110,9 +111,12 @@ def get_encoder(args):
                 encoder = load_red_net_pretrained(args.rednet_pretrained_path, args.overwrite_imagenet, encoder)
         elif 'x' in args.input_keys:
             encoder = ResNet(args.model_version, out_channels, args.pretrained)
+        elif 'size' in args.input_keys:
+            encoder = dfusion.PropertyNet(args.num_classes, out_channels, pc_embed_channels=args.pc_embed_channels,
+                                          pc_scale=args.pc_scale, pc_temp=args.pc_temp)
         elif 'weight' in args.input_keys:
-            encoder = dfusion.WeightNet(args.num_classes, out_channels, args.pc_embed_channels, pc_scale=args.pc_scale,
-                                        pc_temp=args.pc_temp)
+            encoder = dfusion.WeightNet(args.num_classes, out_channels, pc_embed_channels=args.pc_embed_channels,
+                                        pc_scale=args.pc_scale, pc_temp=args.pc_temp)
         else:
             raise ValueError('No model implemented for the input keys {}'.format(args.input_keys))
 

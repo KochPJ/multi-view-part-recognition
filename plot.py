@@ -38,16 +38,16 @@ def plot_res(epxs, extr: '',  cut: '', exp_name='', lenght_wise=False, return_me
 
             titles.append(title)
 
-
-            accs.append(v['topk_test']['1']['m'])
-            maxs.append(v['topk_test']['1']['max'])
-            mins.append(v['topk_test']['1']['min'])
-            stds.append(v['topk_test']['1']['s'])
-            ls.append(v['topk_test']['1']['l'])
-            alls.append(v['topk_test']['1']['all'])
+            selk = '1'
+            accs.append(v['topk_test'][selk]['m'])
+            maxs.append(v['topk_test'][selk]['max'])
+            mins.append(v['topk_test'][selk]['min'])
+            stds.append(v['topk_test'][selk]['s'])
+            ls.append(v['topk_test'][selk]['l'])
+            alls.append(v['topk_test'][selk]['all'])
 
             r = '{} | '.format(title)
-            for k, acc in v['topk_test']['1'].items():
+            for k, acc in v['topk_test'][selk].items():
                 r += '{}: {},'.format(k, acc)
             #print(r)
             train_loss_m.append(v['losses_train']['m'])
@@ -285,15 +285,15 @@ if __name__ == '__main__':
 
     plot_res(fusion_exps, extr='', cut='ResNet_50_nr3_1-6-9_fuse_', exp_name='MV Fusion', lut=fusion_lut)
     plot_res(augs_exps, extr='', cut='ResNet_50_nr3_1-6-9_', exp_name='Aug')
-    #plot_res(transformer_exps, extr='', cut='ResNet_50_nr', exp_name='Transformer')
+    plot_res(transformer_exps, extr='', cut='ResNet_50_nr', exp_name='Transformer')
     plot_res(single_exps, extr='', cut='ResNet_50_nr', exp_name='SingeView & Pretrained v3')
-    #plot_res(v3, extr='', cut='ResNet_50_nr3_1-6-9_', exp_name='3V data views')
-    #plot_res(allv, extr='', cut='ResNet_50_nr', exp_name='All Data Views')
-    #plot_res(weight_exps, extr= '',  cut= 'ResNet_50_nr3_1-6-9_', exp_name='Weight')
+    plot_res(v3, extr='', cut='ResNet_50_nr3_1-6-9_', exp_name='3V data views')
+    plot_res(allv, extr='', cut='ResNet_50_nr', exp_name='All Data Views')
+    plot_res(weight_exps, extr= '',  cut= 'ResNet_50_nr3_1-6-9_', exp_name='Weight')
 
     acc_v, std_v = plot_res(view_exps, extr='', cut='ResNet_50_nr', exp_name='View', lenght_wise=True)
     acc_r, std_r = plot_res(rot_exps, extr= '',  cut='ResNet_50_nr', exp_name='Rotation')
-    #plot_res(weightnet_exps, extr= '',  cut='', exp_name='WeightNet')
+    plot_res(weightnet_exps, extr= '',  cut='', exp_name='WeightNet')
     acc_d, std_d = plot_res(dataview_exps, extr= '',  cut='ResNet_50_nr3_1-6-9_datatviews_', exp_name='DataViews')
 
     alpha=0.5

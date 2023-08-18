@@ -3,6 +3,7 @@ import models.fusion as fusion
 import inspect
 from models.encoders import get_encoder
 import math
+import torch
 
 
 __fusion__ = {
@@ -24,6 +25,10 @@ __keeps_shape__ = [fusion.TransformerMultiViewHead]
 
 
 def get_model(args):
+    try:
+        return_view_activations = args.return_view_activations
+    except:
+        return_view_activations = False
     model = get_encoder(args)
     if args.multiview:
         f = __fusion__.get(args.fusion)
@@ -41,7 +46,8 @@ def get_model(args):
                                   use_weightnet=args.use_weightNet,
                                   pc_scale=args.pc_scale,
                                   pc_temp=args.pc_temp,
-                                  freeze_weightnet=args.freeze_weightnet)
+                                  freeze_weightnet=args.freeze_weightnet,
+                                  return_view_activations=return_view_activations)
         elif 'x' in args.input_keys:
             model = MultiView(model, args.num_classes, num_views, f, args.tf_layers,
                               multi_head_classification=args.multi_head_classification,
@@ -51,7 +57,10 @@ def get_model(args):
                               use_weightnet=args.use_weightNet,
                               pc_scale=args.pc_scale,
                               pc_temp=args.pc_temp,
-                              freeze_weightnet=args.freeze_weightnet)
+                              freeze_weightnet=args.freeze_weightnet,
+                              return_view_activations=return_view_activations,
+                              use_propertyNet=args.use_propertyNet,
+                              num_properties=4 if 'size' in args.input_keys else 1)
         elif 'weight' in args.input_keys:
             print('Using no multi view  model for input keys: {}'.format(args.input_keys))
             pass
@@ -66,7 +75,8 @@ def get_model(args):
                           use_weightnet=args.use_weightNet,
                           pc_scale=args.pc_scale,
                           pc_temp=args.pc_temp,
-                          freeze_weightnet=args.freeze_weightnet)
+                          freeze_weightnet=args.freeze_weightnet,
+                          use_propertyNet=args.use_propertyNet)
     return model
 
 #class MultiViewDepth(nn.Module):
@@ -76,7 +86,8 @@ class MultiView(nn.Module):
     def __init__(self, encoder: nn.Module, num_classes: int, num_views: int, fusion: nn.Module,
                  tf_layers: int = 0, dropout: float = 0.5, multi_head_classification=False,
                  with_positional_encoding=False, learnable_pe=False, pc_embed_channels=64, cat_weight=True,
-                 pc_temp=2000, pc_scale=200*math.pi, use_weightnet=False, freeze_weightnet=False):
+                 pc_temp=2000, pc_scale=200*math.pi, use_weightnet=False, freeze_weightnet=False,
+                 return_view_activations=False, use_propertyNet=False, num_properties=1):
         super(MultiView, self).__init__()
         self.encoder = encoder
         print('Multi view rgb multi_head_classification: {}'.format(multi_head_classification))
@@ -90,13 +101,15 @@ class MultiView(nn.Module):
                     'pc_temp': pc_temp,
                     'pc_scale': pc_scale,
                     'use_weightnet': use_weightnet,
-                    'freeze_weightnet': freeze_weightnet}
+                    'freeze_weightnet': freeze_weightnet,
+                    'use_propertyNet': use_propertyNet}
 
         args = {arg: arg_dict[arg] for arg in args if arg in arg_dict}
         self.multiViewFusion = fusion(**args)
 
         if tf_layers > 0:
             self.tf = __fusion__['Transformer'](encoder.out_channels, tf_layers)
+
         else:
             self.tf = None
 
@@ -111,7 +124,7 @@ class MultiView(nn.Module):
         self.pc_embed_channels = pc_embed_channels
 
         if not self.allows_weight and self.cat_weight:
-            self.weight_fusion1 = nn.Linear(encoder.out_channels + pc_embed_channels, encoder.out_channels)
+            self.weight_fusion1 = nn.Linear(encoder.out_channels + num_properties*pc_embed_channels, encoder.out_channels)
             self.weight_fusion2 = nn.Linear(encoder.out_channels, encoder.out_channels)
         else:
             self.weight_fusion1 = None
@@ -127,6 +140,7 @@ class MultiView(nn.Module):
         self.drop_out2 = nn.Dropout(p=dropout)
         self.norm = nn.BatchNorm1d(encoder.out_channels)
         self.multi_head_classification = multi_head_classification
+        self.return_view_activations = return_view_activations
         self.view_fc = None
         if self.multi_head_classification:
             self.view_fc = nn.ModuleList([nn.Linear(encoder.out_channels, num_classes) for _ in range(num_views)])
@@ -143,6 +157,13 @@ class MultiView(nn.Module):
 
         # get shape back again and flatten for each set
         x = x.view(bs, i, -1)
+        if self.return_view_activations:
+            activations = {'mean': torch.mean(torch.abs(x), dim=2),
+                           'std': torch.std(torch.abs(x), dim=2),
+                           'topk': torch.topk(torch.abs(x), k=x.shape[-1] ,dim=2).values
+                           }
+        else:
+            activations = None
 
         # transformer encoder head for view fusion
         if self.multi_head_classification:
@@ -167,6 +188,9 @@ class MultiView(nn.Module):
         if weight is not None and self.cat_weight and not self.allows_weight:
             weight = fusion.get_pos_embed(weight, self.pc_embed_channels).squeeze(1)
             #print(x.shape, weight.shape)
+            if len(weight.shape) ==3:
+                weight = weight.view(len(weight), -1)
+            #print(weight.shape, x.shape)
             x = torch.cat([weight, x], dim=1)
             #print(x.shape)
             x = self.weight_fusion2(self.weight_fusion1(x))
@@ -177,6 +201,10 @@ class MultiView(nn.Module):
         if self.multi_head_classification:
             multi['out'] = x
             x = multi
+
+        if activations is not None:
+            x = (x, activations)
+
         return x
 
 
@@ -184,13 +212,15 @@ class MultiViewRGBD(nn.Module):
     def __init__(self, encoder: nn.Module, num_classes: int, num_views: int, fusion: nn.Module,
                  tf_layers: int = 0, dropout: float = 0.5, multi_head_classification=False, rgbd_wise_multi_head=False,
                  with_positional_encoding=False, learnable_pe=False, pc_embed_channels=64, rgbd_wise_mv_fusion=False,
-                 pc_temp=2000, pc_scale=200*math.pi, use_weightnet=False, freeze_weightnet=False):
+                 pc_temp=2000, pc_scale=200*math.pi, use_weightnet=False, use_propertynet=False,
+                 freeze_weightnet=False, return_view_activations=False):
         super(MultiViewRGBD, self).__init__()
         print('Multi view RGBD multi_head_classification: {}, rgbd_wise_multi_head: {}'.format(
             multi_head_classification, rgbd_wise_multi_head))
         self.encoder = encoder
 
         self.allows_weight = False
+        self.use_propertynet =True
         for mv_fusion in __allows_weight__:
             if isinstance(fusion, mv_fusion):
                 self.allows_weight = True
@@ -210,6 +240,7 @@ class MultiViewRGBD(nn.Module):
         self.multi_head_classification = multi_head_classification
         self.rgbd_wise_multi_head = rgbd_wise_multi_head
         self.rgbd_wise_mv_fusion = rgbd_wise_mv_fusion if self.rgbd_wise_multi_head else False
+        self.return_view_activations = return_view_activations
 
         args = [arg.name for arg in inspect.signature(fusion).parameters.values()]
         arg_dict = {'channels': encoder.out_channels,
@@ -252,6 +283,9 @@ class MultiViewRGBD(nn.Module):
 
         if isinstance(x, dict):
             x, xc, xd = x['out'], x['x'], x['xd']
+        else:
+            xc, xd = None, None
+
 
         x = self.norm(x)
         if self.training:
@@ -259,6 +293,23 @@ class MultiViewRGBD(nn.Module):
 
         # get shape back again and flatten for each set
         x = x.view(bs, i, -1)
+
+        if self.return_view_activations:
+
+            if xc is not None:
+                #print(x.shape, xc.shape, xd.shape)
+                x_acts = torch.cat([x, xc.unsqueeze(0), xd.unsqueeze(0)], dim=1)
+            else:
+                x_acts = x
+                #print(x.shape)
+
+            activations = {
+                'mean': torch.mean(torch.abs(x_acts), dim=2),
+                'std': torch.std(torch.abs(x_acts), dim=2),
+                'topk': torch.topk(torch.abs(x_acts), k=x.shape[-1], dim=2).values
+            }
+        else:
+            activations = None
 
         if self.multi_head_classification:
             multi = {}
@@ -300,6 +351,9 @@ class MultiViewRGBD(nn.Module):
         if self.multi_head_classification:
             multi['out'] = x
             x = multi
+
+        if activations is not None:
+            x = (x, activations)
         return x
 
 

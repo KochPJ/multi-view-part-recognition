@@ -50,6 +50,7 @@ def get_args_parser():
     parser.add_argument('--shuf_views_vw', default=True, type=bool)
     parser.add_argument('--p_shuf_cw', default=1.0, type=float)
     parser.add_argument('--p_shuf_vw', default=1.0, type=float)
+    parser.add_argument('--view_noise', default=0.0, type=float)
     parser.add_argument('--data_views', default='1-6-9', type=str) #1-6-9 #1-2-3-4-5-6-7-8-9-10
     parser.add_argument('--views', default='1-6-9', type=str) #1-6-9
     parser.add_argument('--random_view_order', default=False, type=bool)
@@ -98,6 +99,7 @@ def get_args_parser():
     parser.add_argument('--pc_scale', default=200*math.pi, type=float)
     parser.add_argument('--pc_temp', default=2000, type=float)
     parser.add_argument('--use_weightNet', default=False, type=bool)
+    parser.add_argument('--use_propertyNet', default=False, type=bool)
     parser.add_argument('--freeze_weightnet', default=False, type=bool)
 
     # scheduler
@@ -351,6 +353,24 @@ def main(args):
         for step, (x, y) in enumerate(dataloader['train']):
             #if step == 4:
             #    break
+
+            if args.view_noise > 0:
+                #print(torch.mean(x['x']), x['x'].shape)
+                noise = torch.rand(x['x'].shape)
+                inds = torch.rand(len(noise)) < args.view_noise
+                #print(inds, args.view_noise)
+                x['x'][inds] = noise[inds]
+
+                #print(torch.mean(x['x']), x['x'].shape)
+                if 'depth' in x:
+                    noise = torch.rand(x['depth'].shape)
+                    inds = torch.rand(len(noise)) < args.view_noise
+                    x['depth'][inds] = noise[inds]
+
+            if 'size' in x:
+                x['weight'] = torch.cat([x['weight'], x['size'].squeeze(1)], dim=1)
+                del x['size']
+
             for key in x:
                 x[key] = x[key].to(device)
 
@@ -425,6 +445,10 @@ def main(args):
         for step, (x, y) in enumerate(dataloader['valid']):
             #if step == 4:
             #    break
+            if 'size' in x:
+                x['weight'] = torch.cat([x['weight'], x['size'].squeeze(1)], dim=1)
+                del x['size']
+
             for key in x:
                 x[key] = x[key].to(device)
 
@@ -537,8 +561,13 @@ def main(args):
     losses = []
     t_step = time.time()
     for step, (x, y) in enumerate(dataloader['test']):
-        #if step == 4:
+        #if step == 4:f
         #    break
+
+        if 'size' in x:
+            x['weight'] = torch.cat([x['weight'], x['size'].squeeze(1)], dim=1)
+            del x['size']
+
         for key in x:
             x[key] = x[key].to(device)
 
