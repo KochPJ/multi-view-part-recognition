@@ -96,7 +96,7 @@ if __name__ == '__main__':
     tf_layers = 1
     runs = 40
     run_start = 34 #3
-    start_exp = 27 #3
+    start_exp = 26 #3
     for run in range(run_start, runs):
         outdir_ = os.path.join(outdir, 'run{}'.format(str(run).zfill(3)))
         pretrain_path = [[os.path.join(outdir_,
