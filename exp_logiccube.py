@@ -7,15 +7,18 @@ import argparse
 
 if __name__ == '__main__':
     views_lut = {
+
+        # '1': ['0', '0'],
         # '1-a': ['4', '4'],
-        #'1': '9',
-        # '1-b': ['4', '1-2-4'],
-        # '1-c': ['4', '0-1-2-3-4-5-6-7-8'],
-        #'2': '1-10',
-        '3': '0-4-6',
+        # '1-b': ['6', '6'],
+        '1-c': ['7', '7'],
+        # '1-d': ['7', '1-4-7'],
+        '2-a': ['4-7', '4-7'],
+        '2-b': '0-4-6',
+        '2-c': '0-4-6',
         #'3-c': ['1-6-9', '1-6-9'],
         # '3-b': ['0-4-6', '0-1-2-3-4-5-6-7-8'],
-        '3-c': ['0-4-6', '0-4-6'],
+        # '3-c': ['0-4-6', '0-4-6'],
         #'2': '1-10',
         #'4': '1-3-8-10',
         #'5': '1-3-4-7-9',
@@ -27,18 +30,21 @@ if __name__ == '__main__':
     }
 
     data_views_list = [
-        '0-4-6',
-        '0-2-4-6',
-        '0-1-2-4-6',
-        '0-1-2-3-4-6',
-        '0-1-2-3-4-5-6',
+        '7',
+        '4-7',
+        '0-4-7',
+        '0-2-4-7',
+        '0-1-2-4-7',
+        '0-1-2-3-4-7',
+        '0-1-2-3-4-5-7',
         '0-1-2-3-4-5-6-7',
         '0-1-2-3-4-5-6-7-8']
 
     #views_lut = {
     #    '3': '1-6-9'
     #}
-    main_view = '3' #3
+
+    main_view = '7' #3
 
     parser = argparse.ArgumentParser('MultiView training script', parents=[get_args_parser()])
     args = parser.parse_args()
@@ -49,7 +55,7 @@ if __name__ == '__main__':
     add_PE_exp = False
     add_weight_exp = False # True
     add_roi_crop_exp = False
-    add_view_exp = False  # 5 Experimente
+    add_view_exp = True  # 5 Experimente
     add_view_exp_long = False # gleich
     add_depth_exp = False #True
     shuffle_all_views_exp = False
@@ -57,7 +63,7 @@ if __name__ == '__main__':
     add_pretrain_long_exp = False # gleich
     add_aug_exps = False
     add_rotation_exps = False # True 3exps
-    add_dataviews_exps = False # True 7exps
+    add_dataviews_exps = True # True 7exps
     add_random_view_order_exp = False #True
     add_resize_exp = False
     add_lr_exp = False

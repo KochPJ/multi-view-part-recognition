@@ -23,7 +23,7 @@ def get_args_parser():
     parser.add_argument('--outdir', default='./results', type=str)
     parser.add_argument('--epochs', default=100, type=int) #100
     parser.add_argument('--start_epoch', default=0, type=int)
-    parser.add_argument('--batch_size', default=64, type=int) #32
+    parser.add_argument('--batch_size', default=52, type=int) #32
     parser.add_argument('--num_workers', default=34, type=int) #34
     parser.add_argument('--device', default='cuda:0', type=str)
     parser.add_argument('--multi_gpu', default=True, type=bool)
@@ -53,7 +53,7 @@ def get_args_parser():
     parser.add_argument('--p_shuf_cw', default=1.0, type=float)
     parser.add_argument('--p_shuf_vw', default=1.0, type=float)
     parser.add_argument('--data_views', default='0-1-2-3-4-5-6-7-8', type=str) #1-6-9 #1-2-3-4-5-6-7-8-9-10
-    parser.add_argument('--views', default='0-2', type=str) #1-6-9 #1-2-5-7 #0-1-2-3-4 # 0-2-4-6
+    parser.add_argument('--views', default='0-1-2', type=str) #1-6-9 #1-2-5-7 #0-1-2-3-4 # 0-2-4-6
     parser.add_argument('--random_view_order', default=False, type=bool)
     parser.add_argument('--rotations', default='imageset1-imageset2-imageset3-imageset4', type=str) # Errorotenzial
     parser.add_argument('--input_keys', default='x', type=str) # x
@@ -69,8 +69,8 @@ def get_args_parser():
     parser.add_argument('--depth2hha', default=False, type=bool)
     parser.add_argument('--rotation_aug', default=True, type=bool)
     parser.add_argument('--flip_aug', default=True, type=bool)
-    parser.add_argument('--width', default=256, type=int)
-    parser.add_argument('--height', default=256, type=int)
+    parser.add_argument('--width', default=400, type=int)
+    parser.add_argument('--height', default=400, type=int)
     parser.add_argument('--multi_scale_training', default=False, type=bool)
     parser.add_argument('--training_scale_low', default=0.1, type=float)
     parser.add_argument('--training_scale_high', default=0.1, type=float)
