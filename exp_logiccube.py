@@ -12,10 +12,17 @@ if __name__ == '__main__':
         # '1-a': ['4', '4'],
         # '1-b': ['6', '6'],
         '1-c': ['7', '7'],
-        # '1-d': ['7', '1-4-7'],
+        '1-d': ['7', '4-7'],
+        '1-e': ['7', '1-4-7'],
         '2-a': ['4-7', '4-7'],
-        '2-b': '0-4-6',
-        '2-c': '0-4-6',
+        '2-b': ['4-7', '1-4-7'],
+        '2-c': ['4-7', '0-1-4-7'],
+        '2-d': ['4-7', '0-1-2-4-7'],
+        '2-e': ['4-7', '0-1-2-3-4-7'],
+        '2-f': ['4-7', '0-1-2-3-4-5-7'],
+        '2-g': ['4-7', '0-1-2-3-4-5-6-7'],
+
+
         #'3-c': ['1-6-9', '1-6-9'],
         # '3-b': ['0-4-6', '0-1-2-3-4-5-6-7-8'],
         # '3-c': ['0-4-6', '0-4-6'],
@@ -63,7 +70,7 @@ if __name__ == '__main__':
     add_pretrain_long_exp = False # gleich
     add_aug_exps = False
     add_rotation_exps = False # True 3exps
-    add_dataviews_exps = True # True 7exps
+    add_dataviews_exps = False # True 7exps
     add_random_view_order_exp = False #True
     add_resize_exp = False
     add_lr_exp = False
@@ -86,10 +93,10 @@ if __name__ == '__main__':
 
     depth_epoch_multiplier = 1.0
     long_multiplier = 5.0
-    num_epoch_multiplier = 0.5
+    num_epoch_multiplier = 0.8
     tf_layers = 1
-    runs = 27
-    run_start = 26 #3
+    runs = 28
+    run_start = 27 #3
     start_exp = 0 #3
     for run in range(run_start, runs):
         outdir_ = os.path.join(outdir, 'run{}'.format(str(run).zfill(3)))
