@@ -1,3 +1,5 @@
+import copy
+
 import torchvision.transforms.functional as F
 import torchvision.transforms as transforms
 from utils.stuff import random_flip
@@ -69,23 +71,61 @@ class ColorJitter:
         return format_string
 
 class RandomNoise:
-    def __init__(self, p=0.01, disable=0.00, const=0.020):
+    def __init__(self, p=0.01, disable=0.0, const=0.020):
         self.disable = disable
         self.p = p
         self.const = const
-        self.rand = self.disable + (1-self.disable) // 2
+        self.rand = self.disable + ((1-self.disable) / 2)
 
     def __call__(self, sample):
         if 'weight' in sample:
             r = np.random.rand()
             if r < self.disable:
-                sample['weight'] = torch.Tensor([0.0])
+                if np.random.rand() > 0.5:
+                    sample['weight'] = torch.Tensor([0.0])
+                else:
+                    sample['weight'] = torch.Tensor([float(np.random.rand()*10)])
+
             elif r < self.rand:
                 sample['weight'] += (torch.rand([1]) * (self.p * 2)) - self.p
             else:
                 sample['weight'] += (torch.rand([1]) * (self.const * 2)) - self.const
+
             if sample['weight'] < 0:
                 sample['weight'] = torch.Tensor([0.0])
+
+        if 'size' in sample:
+            r = np.random.rand()
+            if r < self.disable:
+                if np.random.rand() > 0.5:
+                    sample['size'][0] = torch.Tensor([
+                        0
+                        if np.random.rand() < 0.33 else s
+                        for s in sample['size'][0]
+                    ])
+                else:
+                    sample['size'][0] = torch.Tensor([
+                        np.random.rand() * 0.4
+                        if np.random.rand() < 0.33 else s
+                        for s in sample['size'][0]
+                    ])
+
+            elif r < self.rand:
+                sample['size'][0] = torch.Tensor([
+                    s+(torch.rand([1]) * (self.p * 2)) - self.p
+                    if np.random.rand() > 0.5 else s
+                    for s in sample['size'][0]
+                ])
+            else:
+                sample['size'][0] = torch.Tensor([
+                    s + (torch.rand([1]) * (self.const * 2)) - self.const
+                    if np.random.rand() > 0.5 else s
+                    for s in sample['size'][0]
+                ])
+
+            sample['size'][sample['size'] < 0] = 0
+            sample['size'] = torch.sort(sample['size']).values
+
         return sample
 
 

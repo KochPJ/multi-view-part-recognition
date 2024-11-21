@@ -7,14 +7,14 @@ import argparse
 
 if __name__ == '__main__':
     views_lut = {
-        '1-a': ['9', '9'],
+        #'1-a': ['9', '9'],
         #'1': '9',
-        '1-b': ['9', '1-6-9'],
-        '1-c': ['9', '1-2-3-4-5-6-7-8-9-10'],
+        #'1-b': ['9', '1-6-9'],
+        #'1-c': ['9', '1-2-3-4-5-6-7-8-9-10'],
         #'2': '1-10',
         '3': '1-6-9',
         #'3-c': ['1-6-9', '1-6-9'],
-        '3-b': ['1-6-9', '1-2-3-4-5-6-7-8-9-10'],
+        #'3-b': ['1-6-9', '1-2-3-4-5-6-7-8-9-10'],
         #'2': '1-10',
         #'4': '1-3-8-10',
         #'5': '1-3-4-7-9',
@@ -47,11 +47,12 @@ if __name__ == '__main__':
     add_fusion_exp = False # True
     add_encoder_decoder_tf = False
     add_PE_exp = False
-    add_weight_exp = True # True
+    add_weight_exp = False # True
     add_roi_crop_exp = False
     add_view_exp = False #10
     add_view_exp_long = False # gleich
     add_depth_exp = False #True
+    add_property_exp = True
     shuffle_all_views_exp = False
     add_pretrain_exp = False
     add_pretrain_long_exp = False # gleich
@@ -64,6 +65,8 @@ if __name__ == '__main__':
     add_models_exp = False
     add_max_pool_exp = False #gleich
     execute = True
+
+
 
     rots = [
         '0',
@@ -86,13 +89,14 @@ if __name__ == '__main__':
     new_res = (512, 512)
 
 
-    depth_epoch_multiplier = 1.0
+    depth_epoch_multiplier = 2.0
     long_multiplier = 5.0
     num_epoch_multiplier = 0.5
+    view_noise = 0.2
     tf_layers = 1
-    runs = 30
-    run_start = 29 #3
-    start_exp = 0 #3
+    runs = 40
+    run_start = 34 #3
+    start_exp = 26 #3
     for run in range(run_start, runs):
         outdir_ = os.path.join(outdir, 'run{}'.format(str(run).zfill(3)))
         pretrain_path = [[os.path.join(outdir_,
@@ -436,12 +440,12 @@ if __name__ == '__main__':
                     for fusion in ['TransfomerEncoderDecoderMultiViewHead']: #TransfomerEncoderDecoderMultiViewHead, Conv
                         b = copy.deepcopy(a)
 
-                        #setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'Weight_Only'))
-                        #setattr(b, 'input_keys', 'weight')
-                        #setattr(b, 'load_keys', 'weight')
-                        #setattr(b, 'enable_weight_input', 0.0)
-                        #setattr(b, 'batch_size', 512)
-                        #exps.append(copy.deepcopy(b))
+                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'Weight_Only'))
+                        setattr(b, 'input_keys', 'weight')
+                        setattr(b, 'load_keys', 'weight')
+                        setattr(b, 'enable_weight_input', 0.0)
+                        setattr(b, 'batch_size', 512)
+                        exps.append(copy.deepcopy(b))
 
 
                         #b = copy.deepcopy(a)
@@ -466,7 +470,7 @@ if __name__ == '__main__':
                         setattr(b, 'multi_head_classification', True)
                         setattr(b, 'random_view_order', True)
                         setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), '2RGB_TEDF'))
-                        exps.append(copy.deepcopy(b))
+                        #exps.append(copy.deepcopy(b))
 
                         setattr(b, 'with_positional_encoding', True)
                         setattr(b, 'learnable_pe', True)
@@ -478,7 +482,7 @@ if __name__ == '__main__':
                         setattr(b, 'enable_weight_input', 0.0)
                         setattr(b, 'use_weightNet', False)
                         setattr(b, 'freeze_weightnet', False)
-                        exps.append(copy.deepcopy(b))
+                        #exps.append(copy.deepcopy(b))
 
                         setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), '2Weight_TEDF_WeightNet'))
                         setattr(b, 'multi_head_classification', True)
@@ -488,7 +492,7 @@ if __name__ == '__main__':
                         setattr(b, 'enable_weight_input', 0.0)
                         setattr(b, 'use_weightNet', True)
                         setattr(b, 'freeze_weightnet', False)
-                        exps.append(copy.deepcopy(b))
+                        #exps.append(copy.deepcopy(b))
 
 
                         setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), '2Weight_TEDF_WeightNet-freezed'))
@@ -499,50 +503,265 @@ if __name__ == '__main__':
                         setattr(b, 'enable_weight_input', 0.0)
                         setattr(b, 'use_weightNet', True)
                         setattr(b, 'freeze_weightnet', True)
+                        #exps.append(copy.deepcopy(b))
+
+                        setattr(b, 'fusion', fusion)
+                        setattr(b, 'tf_layers', 0)
+                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'Weight_TEDF_WeightNet_Frozen'))
+                        setattr(b, 'multi_head_classification', True)
+                        setattr(b, 'with_positional_encoding', True)
+                        setattr(b, 'learnable_pe', True)
+                        setattr(b, 'random_view_order', True)
+                        setattr(b, 'enable_weight_input', 0.0)
+                        setattr(b, 'use_weightNet', True)
+                        setattr(b, 'freeze_weightnet', True)
                         exps.append(copy.deepcopy(b))
 
+
+
+                        setattr(b, 'fusion', fusion)
+                        setattr(b, 'tf_layers', 0)
+                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'Weight_EDTF02'))
+                        setattr(b, 'multi_head_classification', True)
+                        setattr(b, 'with_positional_encoding', True)
+                        setattr(b, 'learnable_pe', True)
+                        setattr(b, 'random_view_order', True)
+                        setattr(b, 'enable_weight_input', 0.2)
+                        exps.append(copy.deepcopy(b))
+                        setattr(b, 'fusion', fusion)
+                        setattr(b, 'tf_layers', 0)
+                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'Weight_EDTF07'))
+                        setattr(b, 'multi_head_classification', True)
+                        setattr(b, 'with_positional_encoding', True)
+                        setattr(b, 'learnable_pe', True)
+                        setattr(b, 'random_view_order', True)
+                        setattr(b, 'enable_weight_input', 0.7)
+                        exps.append(copy.deepcopy(b))
+
+                        setattr(b, 'fusion', fusion)
+                        setattr(b, 'tf_layers', 0)
+                        setattr(b, 'name', '{}_{}_{}'.format(getattr(a, 'name'), 'Weight_EDTF_noPE', fusion))
+                        setattr(b, 'multi_head_classification', True)
+                        setattr(b, 'with_positional_encoding', False)
+                        setattr(b, 'learnable_pe', False)
+                        setattr(b, 'random_view_order', True)
+                        setattr(b, 'enable_weight_input', 0.2)
+                        exps.append(copy.deepcopy(b))
+
+                if add_property_exp:
+                    for fusion in ['TransfomerEncoderDecoderMultiViewHead']: #TransfomerEncoderDecoderMultiViewHead, Conv
+                        b = copy.deepcopy(a)
+
+                        #setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'Weight_Only'))
+                        #setattr(b, 'input_keys', 'weight-size')
+                        #setattr(b, 'load_keys', 'weight-size')
+                        #setattr(b, 'enable_weight_input', 0.0)
+                        #setattr(b, 'batch_size', 512)
+                        #exps.append(copy.deepcopy(b))
+
+
+                        #b = copy.deepcopy(a)
                         #setattr(b, 'fusion', fusion)
                         #setattr(b, 'tf_layers', 0)
-                        #setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'Weight_TEDF_WeightNet_Frozen'))
+                        #setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'Weight_TEDF400'))
                         #setattr(b, 'multi_head_classification', True)
                         #setattr(b, 'with_positional_encoding', True)
                         #setattr(b, 'learnable_pe', True)
                         #setattr(b, 'random_view_order', True)
                         #setattr(b, 'enable_weight_input', 0.0)
-                        #setattr(b, 'use_weightNet', True)
-                        #setattr(b, 'freeze_weightnet', True)
                         #exps.append(copy.deepcopy(b))
+                        #setattr(b, 'lr_group_wise', True)
+                        #setattr(b, 'epochs', int(getattr(a, 'epochs') * 2))
+                        #setattr(b, 'lr_encoder', 1e-5)
+                        #setattr(b, 'lr_fusion', 1e-4)
+
+                        #setattr(b, 'input_keys', 'depth')
+                        #setattr(b, 'load_keys', 'mask-depth')
+
+                        setattr(b, 'fusion', fusion)
+                        setattr(b, 'encoder_path', './results/run024/ResNet_50_nr1-b_9_long/ResNet_50_nr1-b_9_long_best.ckpt')
+                        setattr(b, 'lr_group_wise', True)
+                        setattr(b, 'lr_encoder', 0.0)
+
+                        setattr(b, 'tf_layers', 0)
+                        setattr(b, 'multi_head_classification', True)
+                        setattr(b, 'random_view_order', True)
+                        # setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), '2RGB_TEDF'))
+                        # exps.append(copy.deepcopy(b))
+
+                        setattr(b, 'with_positional_encoding', True)
+                        setattr(b, 'learnable_pe', True)
+                        setattr(b, 'input_keys', 'x-weight-size')
+                        setattr(b, 'load_keys', 'mask-x-weight-meta-size')
+                        # setattr(b, 'views', '1-10')
+                        # setattr(b, 'data_views', '1-10')
+                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'Property-FrozenE_TEDF'))
+                        setattr(b, 'enable_weight_input', 0.0)
+                        setattr(b, 'use_propertyNet', False)
+                        setattr(b, 'freeze_weightnet', False)
+                        exps.append(copy.deepcopy(b))
+                        if view_noise > 0:
+                            c = copy.deepcopy(b)
+                            setattr(c, 'name', '{}_{}'.format(getattr(b, 'name'), '_viewNoise'))
+                            setattr(c, 'view_noise', view_noise)
+                            exps.append(copy.deepcopy(c))
+
+                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'Property-FrozenE_TEDF_WeightNet'))
+                        setattr(b, 'multi_head_classification', True)
+                        setattr(b, 'with_positional_encoding', True)
+                        setattr(b, 'learnable_pe', True)
+                        setattr(b, 'random_view_order', True)
+                        setattr(b, 'enable_weight_input', 0.0)
+                        setattr(b, 'use_propertyNet', True)
+                        setattr(b, 'freeze_weightnet', False)
+                        exps.append(copy.deepcopy(b))
+                        if view_noise > 0:
+                            c = copy.deepcopy(b)
+                            setattr(c, 'name', '{}_{}'.format(getattr(b, 'name'), '_viewNoise'))
+                            setattr(c, 'view_noise', view_noise)
+                            exps.append(copy.deepcopy(c))
+
+                        setattr(b, 'fusion', fusion)
+                        setattr(b, 'tf_layers', 0)
+                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'Property-FrozenE_TEDF_WeightNet_Frozen'))
+                        setattr(b, 'multi_head_classification', True)
+                        setattr(b, 'with_positional_encoding', True)
+                        setattr(b, 'learnable_pe', True)
+                        setattr(b, 'random_view_order', True)
+                        setattr(b, 'enable_weight_input', 0.0)
+                        setattr(b, 'use_propertyNet', True)
+                        setattr(b, 'freeze_weightnet', True)
+                        exps.append(copy.deepcopy(b))
+                        if view_noise > 0:
+                            c = copy.deepcopy(b)
+                            setattr(c, 'name', '{}_{}'.format(getattr(b, 'name'), '_viewNoise'))
+                            setattr(c, 'view_noise', view_noise)
+                            exps.append(copy.deepcopy(c))
 
 
 
-                        #setattr(b, 'fusion', fusion)
-                        #setattr(b, 'tf_layers', 0)
-                        #setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'Weight_EDTF02'))
-                        #setattr(b, 'multi_head_classification', True)
-                        #setattr(b, 'with_positional_encoding', True)
-                        #setattr(b, 'learnable_pe', True)
-                        #setattr(b, 'random_view_order', True)
-                        #setattr(b, 'enable_weight_input', 0.2)
-                        #exps.append(copy.deepcopy(b))
-                        #tattr(b, 'fusion', fusion)
-                        #setattr(b, 'tf_layers', 0)
-                        #setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'Weight_EDTF07'))
-                        #setattr(b, 'multi_head_classification', True)
-                        #setattr(b, 'with_positional_encoding', True)
-                        #setattr(b, 'learnable_pe', True)
-                        #setattr(b, 'random_view_order', True)
-                        #setattr(b, 'enable_weight_input', 0.7)
+                        setattr(b, 'encoder_path', '')
+
+                        setattr(b, 'lr_group_wise', False)
+                        setattr(b, 'lr_encoder', 1e-4)
+
+
+
+                        setattr(b, 'fusion', fusion)
+                        setattr(b, 'tf_layers', 0)
+                        setattr(b, 'multi_head_classification', True)
+                        setattr(b, 'random_view_order', True)
+                        # setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), '2RGB_TEDF'))
+                        # exps.append(copy.deepcopy(b))
+
+                        setattr(b, 'with_positional_encoding', True)
+                        setattr(b, 'learnable_pe', True)
+                        setattr(b, 'input_keys', 'x-weight-size')
+                        setattr(b, 'load_keys', 'mask-x-weight-meta-size')
+                        # setattr(b, 'views', '1-10')
+                        # setattr(b, 'data_views', '1-10')
+                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'Property_TEDF'))
+                        setattr(b, 'enable_weight_input', 0.0)
+                        setattr(b, 'use_propertyNet', False)
+                        setattr(b, 'freeze_weightnet', False)
+                        exps.append(copy.deepcopy(b))
+                        if view_noise > 0:
+                            c = copy.deepcopy(b)
+                            setattr(c, 'name', '{}_{}'.format(getattr(b, 'name'), '_viewNoise'))
+                            setattr(c, 'view_noise', view_noise)
+                            exps.append(copy.deepcopy(c))
+
+                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'Property_TEDF_WeightNet'))
+                        setattr(b, 'multi_head_classification', True)
+                        setattr(b, 'with_positional_encoding', True)
+                        setattr(b, 'learnable_pe', True)
+                        setattr(b, 'random_view_order', True)
+                        setattr(b, 'enable_weight_input', 0.0)
+                        setattr(b, 'use_propertyNet', True)
+                        setattr(b, 'freeze_weightnet', False)
+                        exps.append(copy.deepcopy(b))
+                        if view_noise > 0:
+                            c = copy.deepcopy(b)
+                            setattr(c, 'name', '{}_{}'.format(getattr(b, 'name'), '_viewNoise'))
+                            setattr(c, 'view_noise', view_noise)
+                            exps.append(copy.deepcopy(c))
+
+                        setattr(b, 'fusion', fusion)
+                        setattr(b, 'tf_layers', 0)
+                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'Property_TEDF_WeightNet_Frozen'))
+                        setattr(b, 'multi_head_classification', True)
+                        setattr(b, 'with_positional_encoding', True)
+                        setattr(b, 'learnable_pe', True)
+                        setattr(b, 'random_view_order', True)
+                        setattr(b, 'enable_weight_input', 0.0)
+                        setattr(b, 'use_propertyNet', True)
+                        setattr(b, 'freeze_weightnet', True)
+                        exps.append(copy.deepcopy(b))
+                        if view_noise > 0:
+                            c = copy.deepcopy(b)
+                            setattr(c, 'name', '{}_{}'.format(getattr(b, 'name'), '_viewNoise'))
+                            setattr(c, 'view_noise', view_noise)
+                            exps.append(copy.deepcopy(c))
+
+
+                        setattr(b, 'rgbd_wise_multi_head', True)
+
+
+                        setattr(b, 'fusion', fusion)
+                        setattr(b, 'tf_layers', 0)
+                        setattr(b, 'multi_head_classification', True)
+                        setattr(b, 'random_view_order', True)
+                        #setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), '2RGB_TEDF'))
                         #exps.append(copy.deepcopy(b))
 
-                        #setattr(b, 'fusion', fusion)
-                        #setattr(b, 'tf_layers', 0)
-                        #setattr(b, 'name', '{}_{}_{}'.format(getattr(a, 'name'), 'Weight_EDTF_noPE', fusion))
-                        #setattr(b, 'multi_head_classification', True)
-                        #setattr(b, 'with_positional_encoding', False)
-                        #setattr(b, 'learnable_pe', False)
-                        #setattr(b, 'random_view_order', True)
-                        #setattr(b, 'enable_weight_input', 0.2)
-                        #exps.append(copy.deepcopy(b))
+                        setattr(b, 'with_positional_encoding', True)
+                        setattr(b, 'learnable_pe', True)
+                        setattr(b, 'input_keys', 'x-weight-size-depth')
+                        setattr(b, 'load_keys', 'mask-x-weight-meta-size-depth')
+                        #setattr(b, 'views', '1-10')
+                        #setattr(b, 'data_views', '1-10')
+                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'Property_TEDF_Depth'))
+                        setattr(b, 'enable_weight_input', 0.0)
+                        setattr(b, 'use_propertyNet', False)
+                        setattr(b, 'freeze_weightnet', False)
+                        exps.append(copy.deepcopy(b))
+                        if view_noise > 0:
+                            c = copy.deepcopy(b)
+                            setattr(c, 'name', '{}_{}'.format(getattr(b, 'name'), '_viewNoise'))
+                            setattr(c, 'view_noise', view_noise)
+                            exps.append(copy.deepcopy(c))
+
+                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'Property_TEDF_WeightNet_Depth'))
+                        setattr(b, 'multi_head_classification', True)
+                        setattr(b, 'with_positional_encoding', True)
+                        setattr(b, 'learnable_pe', True)
+                        setattr(b, 'random_view_order', True)
+                        setattr(b, 'enable_weight_input', 0.0)
+                        setattr(b, 'use_propertyNet', True)
+                        setattr(b, 'freeze_weightnet', False)
+                        exps.append(copy.deepcopy(b))
+                        if view_noise > 0:
+                            c = copy.deepcopy(b)
+                            setattr(c, 'name', '{}_{}'.format(getattr(b, 'name'), '_viewNoise'))
+                            setattr(c, 'view_noise', view_noise)
+                            exps.append(copy.deepcopy(c))
+
+                        setattr(b, 'fusion', fusion)
+                        setattr(b, 'tf_layers', 0)
+                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'Property_TEDF_WeightNet_Frozen_Depth'))
+                        setattr(b, 'multi_head_classification', True)
+                        setattr(b, 'with_positional_encoding', True)
+                        setattr(b, 'learnable_pe', True)
+                        setattr(b, 'random_view_order', True)
+                        setattr(b, 'enable_weight_input', 0.0)
+                        setattr(b, 'use_propertyNet', True)
+                        setattr(b, 'freeze_weightnet', True)
+                        exps.append(copy.deepcopy(b))
+                        if view_noise > 0:
+                            c = copy.deepcopy(b)
+                            setattr(c, 'name', '{}_{}'.format(getattr(b, 'name'), '_viewNoise'))
+                            setattr(c, 'view_noise', view_noise)
+                            exps.append(copy.deepcopy(c))
 
                 if add_depth_exp:
                     for fusion in ['Squeeze&Excite']: #Conv
@@ -559,34 +778,89 @@ if __name__ == '__main__':
                         setattr(b, 'div_factor', 1)
 
 
-                        setattr(b, 'depth2hha', False)
-                        setattr(b, 'norm_depth', True)
-                        setattr(b, 'with_rednet_pretrained', True)
-                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'dfuse_Depth-rednet-norm-long2'))
-                        exps.append(copy.deepcopy(b))
-
+                        setattr(b, 'epochs', int(getattr(a, 'epochs') * depth_epoch_multiplier))
+                        setattr(b, 'input_keys', 'x-depth')
+                        setattr(b, 'load_keys', 'x-mask-depth')
+                        setattr(b, 'depth_fusion', fusion)
+                        setattr(b, 'multi_head_classification', True)
+                        setattr(b, 'rgbd_wise_multi_head', True)
+                        setattr(b, 'rgbd_wise_mv_fusion', True)
                         setattr(b, 'depth2hha', False)
                         setattr(b, 'norm_depth', False)
-                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'dfuse_Depth-long2'))
-                        exps.append(copy.deepcopy(b))
-
-                        setattr(b, 'depth2hha', True)
-                        setattr(b, 'norm_depth', False)
-                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'dfuse_Depth-hha-long2'))
-                        exps.append(copy.deepcopy(b))
-
-                        setattr(b, 'depth2hha', False)
-                        setattr(b, 'norm_depth', True)
-                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'dfuse_Depth-norm-long2'))
-                        exps.append(copy.deepcopy(b))
-
-
-                        #b = copy.deepcopy(a)
-                        #setattr(b, 'lr_group_wise', True)
-                        #setattr(b, 'lr_encoder', 1e-4)
-                        #setattr(b, 'lr_fusion', 1e-5)
+                        setattr(b, 'with_rednet_pretrained', False)
+                        setattr(b, 'overwrite_imagenet', False)
+                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'dfuse_TFED_RGBDMVF_v1'))
+                        setattr(b, 'rgbd_version', 'v1')
+                        setattr(b, 'tf_layers', 0)
+                        setattr(b, 'fusion', 'TransfomerEncoderDecoderMultiViewHead')
+                        setattr(b, 'random_view_order', True)
+                        setattr(b, 'with_positional_encoding', True)
+                        setattr(b, 'learnable_pe', True)
 
                         '''
+                        exps.append(copy.deepcopy(b))
+
+                        setattr(b, 'epochs', int(getattr(a, 'epochs') * depth_epoch_multiplier))
+                        setattr(b, 'input_keys', 'x-depth')
+                        setattr(b, 'load_keys', 'x-mask-depth')
+                        setattr(b, 'depth_fusion', fusion)
+                        setattr(b, 'multi_head_classification', True)
+                        setattr(b, 'rgbd_wise_multi_head', True)
+                        setattr(b, 'rgbd_wise_mv_fusion', True)
+                        setattr(b, 'depth2hha', False)
+                        setattr(b, 'norm_depth', False)
+                        setattr(b, 'with_rednet_pretrained', False)
+                        setattr(b, 'overwrite_imagenet', False)
+                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'dfuse_TFED_RGBDMVF_v2'))
+                        setattr(b, 'rgbd_version', 'v2')
+                        setattr(b, 'tf_layers', 0)
+                        setattr(b, 'fusion', 'TransfomerEncoderDecoderMultiViewHead')
+                        setattr(b, 'random_view_order', True)
+                        setattr(b, 'with_positional_encoding', True)
+                        setattr(b, 'learnable_pe', True)
+                        exps.append(copy.deepcopy(b))
+
+                        setattr(b, 'epochs', int(getattr(a, 'epochs') * depth_epoch_multiplier))
+                        setattr(b, 'input_keys', 'x-depth')
+                        setattr(b, 'load_keys', 'x-mask-depth')
+                        setattr(b, 'depth_fusion', 'Squeeze&Excite-Bi-Directional')
+                        setattr(b, 'multi_head_classification', True)
+                        setattr(b, 'rgbd_wise_multi_head', True)
+                        setattr(b, 'rgbd_wise_mv_fusion', True)
+                        setattr(b, 'depth2hha', False)
+                        setattr(b, 'norm_depth', False)
+                        setattr(b, 'with_rednet_pretrained', False)
+                        setattr(b, 'overwrite_imagenet', False)
+                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'dfuse_TFED_RGBDMVF_v3'))
+                        setattr(b, 'rgbd_version', 'v3')
+                        setattr(b, 'tf_layers', 0)
+                        setattr(b, 'fusion', 'TransfomerEncoderDecoderMultiViewHead')
+                        setattr(b, 'random_view_order', True)
+                        setattr(b, 'with_positional_encoding', True)
+                        setattr(b, 'learnable_pe', True)
+                        exps.append(copy.deepcopy(b))
+
+
+                        setattr(b, 'epochs', int(getattr(a, 'epochs') * depth_epoch_multiplier))
+                        setattr(b, 'input_keys', 'x-depth')
+                        setattr(b, 'load_keys', 'x-mask-depth')
+                        setattr(b, 'depth_fusion', fusion)
+                        setattr(b, 'multi_head_classification', True)
+                        setattr(b, 'rgbd_wise_multi_head', False)
+                        setattr(b, 'rgbd_wise_mv_fusion', True)
+                        setattr(b, 'depth2hha', False)
+                        setattr(b, 'norm_depth', True)
+                        setattr(b, 'with_rednet_pretrained', False)
+                        setattr(b, 'overwrite_imagenet', False)
+                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'dfuse_TFED_RGBD_Norm'))
+                        setattr(b, 'rgbd_version', 'v2')
+                        setattr(b, 'tf_layers', 0)
+                        setattr(b, 'fusion', 'TransfomerEncoderDecoderMultiViewHead')
+                        setattr(b, 'random_view_order', True)
+                        setattr(b, 'with_positional_encoding', True)
+                        setattr(b, 'learnable_pe', True)
+                        exps.append(copy.deepcopy(b))
+
                         setattr(b, 'epochs', int(getattr(a, 'epochs') * depth_epoch_multiplier))
                         setattr(b, 'input_keys', 'x-depth')
                         setattr(b, 'load_keys', 'x-mask-depth')
@@ -615,10 +889,32 @@ if __name__ == '__main__':
                         setattr(b, 'rgbd_wise_multi_head', True)
                         setattr(b, 'rgbd_wise_mv_fusion', True)
                         setattr(b, 'depth2hha', False)
-                        setattr(b, 'norm_depth', False)
+                        setattr(b, 'norm_depth', True)
                         setattr(b, 'with_rednet_pretrained', False)
                         setattr(b, 'overwrite_imagenet', False)
-                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'dfuse_TFED_RGBDMVF'))
+                        setattr(b, 'fuse_layers', False)
+                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'dfuse_TFED_RGBDMVF_Norm_no_fuse'))
+                        setattr(b, 'rgbd_version', 'v2')
+                        setattr(b, 'tf_layers', 0)
+                        setattr(b, 'fusion', 'TransfomerEncoderDecoderMultiViewHead')
+                        setattr(b, 'random_view_order', True)
+                        setattr(b, 'with_positional_encoding', True)
+                        setattr(b, 'learnable_pe', True)
+                        exps.append(copy.deepcopy(b))
+
+                        setattr(b, 'epochs', int(getattr(a, 'epochs') * depth_epoch_multiplier))
+                        setattr(b, 'input_keys', 'x-depth')
+                        setattr(b, 'load_keys', 'x-mask-depth')
+                        setattr(b, 'depth_fusion', fusion)
+                        setattr(b, 'multi_head_classification', True)
+                        setattr(b, 'rgbd_wise_multi_head', True)
+                        setattr(b, 'rgbd_wise_mv_fusion', True)
+                        setattr(b, 'depth2hha', False)
+                        setattr(b, 'norm_depth', True)
+                        setattr(b, 'with_rednet_pretrained', True)
+                        setattr(b, 'overwrite_imagenet', False)
+                        setattr(b, 'fuse_layers', True)
+                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'dfuse_TFED_RGBDMVF_Norm_rednet'))
                         setattr(b, 'rgbd_version', 'v2')
                         setattr(b, 'tf_layers', 0)
                         setattr(b, 'fusion', 'TransfomerEncoderDecoderMultiViewHead')
@@ -628,71 +924,6 @@ if __name__ == '__main__':
                         exps.append(copy.deepcopy(b))
 
 
-                        setattr(b, 'epochs', int(getattr(a, 'epochs') * depth_epoch_multiplier))
-                        setattr(b, 'input_keys', 'x-depth')
-                        setattr(b, 'load_keys', 'x-mask-depth')
-                        setattr(b, 'depth_fusion', fusion)
-                        setattr(b, 'multi_head_classification', True)
-                        setattr(b, 'rgbd_wise_multi_head', True)
-                        setattr(b, 'rgbd_wise_mv_fusion', False)
-                        setattr(b, 'depth2hha', False)
-                        setattr(b, 'norm_depth', False)
-                        setattr(b, 'with_rednet_pretrained', False)
-                        setattr(b, 'overwrite_imagenet', False)
-                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'dfuse_TFED_RGBD'))
-                        setattr(b, 'rgbd_version', 'v2')
-                        setattr(b, 'tf_layers', 0)
-                        setattr(b, 'fusion', 'TransfomerEncoderDecoderMultiViewHead')
-                        setattr(b, 'random_view_order', True)
-                        setattr(b, 'with_positional_encoding', True)
-                        setattr(b, 'learnable_pe', True)
-                        exps.append(copy.deepcopy(b))
-                        '''
-                        '''
-
-                        setattr(b, 'epochs', int(getattr(a, 'epochs') * depth_epoch_multiplier))
-                        setattr(b, 'input_keys', 'x-depth')
-                        setattr(b, 'load_keys', 'x-mask-depth')
-                        setattr(b, 'depth_fusion', fusion)
-                        setattr(b, 'multi_head_classification', True)
-                        setattr(b, 'rgbd_wise_multi_head', True)
-                        setattr(b, 'rgbd_wise_mv_fusion', False)
-                        setattr(b, 'depth2hha', False)
-                        setattr(b, 'norm_depth', False)
-                        setattr(b, 'with_rednet_pretrained', False)
-                        setattr(b, 'overwrite_imagenet', False)
-                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'dfuse_TFED_RGBD_v3'))
-                        setattr(b, 'rgbd_version', 'v3')
-                        setattr(b, 'tf_layers', 0)
-                        setattr(b, 'fusion', 'TransfomerEncoderDecoderMultiViewHead')
-                        setattr(b, 'depth_fusion', 'Squeeze&Excite-Bi-Directional')
-                        setattr(b, 'random_view_order', True)
-                        setattr(b, 'with_positional_encoding', True)
-                        setattr(b, 'learnable_pe', True)
-                        exps.append(copy.deepcopy(b))
-
-                        setattr(b, 'epochs', int(getattr(a, 'epochs') * depth_epoch_multiplier))
-                        setattr(b, 'input_keys', 'x-depth')
-                        setattr(b, 'load_keys', 'x-mask-depth')
-                        setattr(b, 'depth_fusion', fusion)
-                        setattr(b, 'multi_head_classification', True)
-                        setattr(b, 'rgbd_wise_multi_head', True)
-                        setattr(b, 'rgbd_wise_mv_fusion', False)
-                        setattr(b, 'depth2hha', False)
-                        setattr(b, 'norm_depth', False)
-                        setattr(b, 'with_rednet_pretrained', False)
-                        setattr(b, 'overwrite_imagenet', False)
-                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'dfuse_TFED_RGBD_v1'))
-                        setattr(b, 'rgbd_version', 'v1')
-                        setattr(b, 'tf_layers', 0)
-                        setattr(b, 'fusion', 'TransfomerEncoderDecoderMultiViewHead')
-                        setattr(b, 'random_view_order', True)
-                        setattr(b, 'with_positional_encoding', True)
-                        setattr(b, 'learnable_pe', True)
-                        exps.append(copy.deepcopy(b))
-                        '''
-
-                        '''
                         setattr(b, 'epochs', int(getattr(a, 'epochs') * depth_epoch_multiplier))
                         setattr(b, 'input_keys', 'x-depth')
                         setattr(b, 'load_keys', 'x-mask-depth')
@@ -704,6 +935,7 @@ if __name__ == '__main__':
                         setattr(b, 'norm_depth', False)
                         setattr(b, 'with_rednet_pretrained', False)
                         setattr(b, 'overwrite_imagenet', False)
+                        setattr(b, 'fuse_layers', True)
                         setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'dfuse_TFED_RGBDF_HHA'))
                         setattr(b, 'rgbd_version', 'v2')
                         setattr(b, 'tf_layers', 0)
@@ -712,34 +944,8 @@ if __name__ == '__main__':
                         setattr(b, 'with_positional_encoding', True)
                         setattr(b, 'learnable_pe', True)
                         exps.append(copy.deepcopy(b))
+                        '''
 
-                        setattr(b, 'lr_group_wise', True)
-                        setattr(b, 'lr_encoder', 1e-4)
-                        setattr(b, 'lr_fusion', 1e-5)
-                        setattr(b, 'epochs', int(getattr(a, 'epochs') * depth_epoch_multiplier))
-                        setattr(b, 'input_keys', 'x-depth')
-                        setattr(b, 'load_keys', 'x-mask-depth')
-                        setattr(b, 'depth_fusion', fusion)
-                        setattr(b, 'multi_head_classification', True)
-                        setattr(b, 'rgbd_wise_multi_head', True)
-                        setattr(b, 'rgbd_wise_mv_fusion', True)
-                        setattr(b, 'depth2hha', False)
-                        setattr(b, 'norm_depth', True)
-                        setattr(b, 'with_rednet_pretrained', False)
-                        setattr(b, 'overwrite_imagenet', False)
-                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'dfuse_v3no_TFED_RGBDMVF_Norm'))
-                        setattr(b, 'rgbd_version', 'v2')
-                        setattr(b, 'fuse_layers', False)
-                        setattr(b, 'tf_layers', 0)
-                        setattr(b, 'fusion', 'TransfomerEncoderDecoderMultiViewHead')
-                        setattr(b, 'random_view_order', True)
-                        setattr(b, 'with_positional_encoding', True)
-                        setattr(b, 'learnable_pe', True)
-                        exps.append(copy.deepcopy(b))
-
-                        setattr(b, 'lr_group_wise', True)
-                        setattr(b, 'lr_encoder', 1e-4)
-                        setattr(b, 'lr_fusion', 1e-5)
                         setattr(b, 'epochs', int(getattr(a, 'epochs') * depth_epoch_multiplier))
                         setattr(b, 'input_keys', 'x-depth')
                         setattr(b, 'load_keys', 'x-mask-depth')
@@ -751,9 +957,9 @@ if __name__ == '__main__':
                         setattr(b, 'norm_depth', True)
                         setattr(b, 'with_rednet_pretrained', True)
                         setattr(b, 'overwrite_imagenet', False)
-                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'dfuse_v3no_rednet_TFED_RGBDMVF_Norm'))
-                        setattr(b, 'rgbd_version', 'v2')
                         setattr(b, 'fuse_layers', False)
+                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'dfuse_TFED_RGBDMVF_Norm_no_fuse_rednet'))
+                        setattr(b, 'rgbd_version', 'v2')
                         setattr(b, 'tf_layers', 0)
                         setattr(b, 'fusion', 'TransfomerEncoderDecoderMultiViewHead')
                         setattr(b, 'random_view_order', True)
@@ -766,15 +972,35 @@ if __name__ == '__main__':
                         setattr(b, 'load_keys', 'x-mask-depth')
                         setattr(b, 'depth_fusion', fusion)
                         setattr(b, 'multi_head_classification', True)
-                        setattr(b, 'rgbd_wise_multi_head', True)
+                        setattr(b, 'rgbd_wise_multi_head', False)
                         setattr(b, 'rgbd_wise_mv_fusion', True)
-                        setattr(b, 'depth2hha', True)
+                        setattr(b, 'depth2hha', False)
+                        setattr(b, 'norm_depth', True)
+                        setattr(b, 'with_rednet_pretrained', True)
+                        setattr(b, 'overwrite_imagenet', False)
+                        setattr(b, 'fuse_layers', True)
+                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'dfuse_TFED_RGBD_Norm_rednet'))
+                        setattr(b, 'rgbd_version', 'v2')
+                        setattr(b, 'tf_layers', 0)
+                        setattr(b, 'fusion', 'TransfomerEncoderDecoderMultiViewHead')
+                        setattr(b, 'random_view_order', True)
+                        setattr(b, 'with_positional_encoding', True)
+                        setattr(b, 'learnable_pe', True)
+                        exps.append(copy.deepcopy(b))
+
+                        setattr(b, 'epochs', int(getattr(a, 'epochs') * depth_epoch_multiplier))
+                        setattr(b, 'input_keys', 'x-depth')
+                        setattr(b, 'load_keys', 'x-mask-depth')
+                        setattr(b, 'depth_fusion', fusion)
+                        setattr(b, 'multi_head_classification', True)
+                        setattr(b, 'rgbd_wise_multi_head', False)
+                        setattr(b, 'rgbd_wise_mv_fusion', True)
+                        setattr(b, 'depth2hha', False)
                         setattr(b, 'norm_depth', False)
                         setattr(b, 'with_rednet_pretrained', False)
                         setattr(b, 'overwrite_imagenet', False)
-                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'dfuse_v3no_TFED_RGBDF_HHA'))
+                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'dfuse_TFED_RGBDM_v2'))
                         setattr(b, 'rgbd_version', 'v2')
-                        setattr(b, 'fuse_layers', False)
                         setattr(b, 'tf_layers', 0)
                         setattr(b, 'fusion', 'TransfomerEncoderDecoderMultiViewHead')
                         setattr(b, 'random_view_order', True)
@@ -782,148 +1008,7 @@ if __name__ == '__main__':
                         setattr(b, 'learnable_pe', True)
                         exps.append(copy.deepcopy(b))
 
-                        #setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'dfuse_{}'.format(fusion)))
-                        #setattr(b, 'multi_head_classification', False)
-                        #setattr(b, 'rgbd_wise_multi_head', False)
-                        #setattr(b, 'rgbd_version', 'v1')
-                        #setattr(b, 'tf_layers', tf_layers)
-                        #setattr(b, 'with_rednet_pretrained', False)
-                        #setattr(b, 'overwrite_imagenet', False)
-                        #exps.append(copy.deepcopy(b))
-                        #setattr(b, 'depth_fusion', fusion)
-                        #setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'), 'dfuse_{}_multihead'.format(fusion)))
-                        #setattr(b, 'multi_head_classification', True)
-                        #setattr(b, 'rgbd_wise_multi_head', False)
-                        #setattr(b, 'rgbd_version', 'v1')
-                        #setattr(b, 'tf_layers', tf_layers)
-                        #setattr(b, 'with_rednet_pretrained', False)
-                        #setattr(b, 'overwrite_imagenet', False)
-                        #exps.append(copy.deepcopy(b))
-                        #setattr(b, 'depth_fusion', fusion)
-                        #setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'),
-                        # 'dfuse_{}_multihead-RGBDwise'.format(fusion)))
-                        #setattr(b, 'multi_head_classification', True)
-                        #setattr(b, 'rgbd_wise_multi_head', True)
-                        #setattr(b, 'rgbd_version', 'v1')
-                        #setattr(b, 'tf_layers', tf_layers)
-                        #setattr(b, 'with_rednet_pretrained', False)
-                        #setattr(b, 'overwrite_imagenet', False)
-                        #exps.append(copy.deepcopy(b))
-                        '''
-                        '''
-                        setattr(b, 'depth_fusion', fusion)
-                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'),
-                                                          'dfuse_{}_multihead-RGBDwise-notf'.format(fusion)))
-                        setattr(b, 'multi_head_classification', True)
-                        setattr(b, 'rgbd_wise_multi_head', True)
-                        setattr(b, 'rgbd_version', 'v1')
-                        setattr(b, 'tf_layers', 0)
-                        setattr(b, 'with_rednet_pretrained', False)
-                        setattr(b, 'overwrite_imagenet', False)
-                        exps.append(copy.deepcopy(b))
-                        setattr(b, 'depth_fusion', fusion)
-                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'),
-                                                          'dfuse_{}_multihead-RGBDwise-v2'.format(fusion)))
-                        setattr(b, 'multi_head_classification', True)
-                        setattr(b, 'rgbd_wise_multi_head', True)
-                        setattr(b, 'rgbd_version', 'v2')
-                        setattr(b, 'tf_layers', tf_layers)
-                        setattr(b, 'with_rednet_pretrained', False)
-                        setattr(b, 'overwrite_imagenet', False)
-                        exps.append(copy.deepcopy(b))
-                        setattr(b, 'depth_fusion', 'Squeeze&Excite-Bi-Directional')
-                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'),
-                                                          'dfuse_{}_multihead-RGBDwise-v3'.format(fusion)))
-                        setattr(b, 'multi_head_classification', True)
-                        setattr(b, 'rgbd_wise_multi_head', True)
-                        setattr(b, 'rgbd_version', 'v3')
-                        setattr(b, 'tf_layers', tf_layers)
-                        setattr(b, 'with_rednet_pretrained', False)
-                        setattr(b, 'overwrite_imagenet', False)
-                        exps.append(copy.deepcopy(b))
-                        setattr(b, 'depth_fusion', fusion)
-                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'),
-                                                          'dfuse_{}_multihead-RGBDwise-v2-notf'.format(fusion)))
-                        setattr(b, 'multi_head_classification', True)
-                        setattr(b, 'rgbd_wise_multi_head', True)
-                        setattr(b, 'rgbd_version', 'v2')
-                        setattr(b, 'tf_layers', 0)
-                        setattr(b, 'with_rednet_pretrained', False)
-                        setattr(b, 'overwrite_imagenet', False)
-                        exps.append(copy.deepcopy(b))
-                        setattr(b, 'depth_fusion', 'Squeeze&Excite-Bi-Directional')
-                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'),
-                                                          'dfuse_{}_multihead-RGBDwise-v3-notf'.format(fusion)))
-                        setattr(b, 'multi_head_classification', True)
-                        setattr(b, 'rgbd_wise_multi_head', True)
-                        setattr(b, 'rgbd_version', 'v3')
-                        setattr(b, 'tf_layers', 0)
-                        setattr(b, 'with_rednet_pretrained', False)
-                        setattr(b, 'overwrite_imagenet', False)
 
-                        #rednet
-                        exps.append(copy.deepcopy(b))
-                        setattr(b, 'depth_fusion', fusion)
-                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'),
-                                                          'dfuse_{}_multihead-RGBDwise-rednet'.format(fusion)))
-                        setattr(b, 'multi_head_classification', True)
-                        setattr(b, 'rgbd_wise_multi_head', True)
-                        setattr(b, 'rgbd_version', 'v1')
-                        setattr(b, 'tf_layers', tf_layers)
-                        setattr(b, 'with_rednet_pretrained', True)
-                        setattr(b, 'overwrite_imagenet', True)
-                        exps.append(copy.deepcopy(b))
-                        setattr(b, 'depth_fusion', fusion)
-                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'),
-                                                          'dfuse_{}_multihead-RGBDwise-v2-rednet'.format(fusion)))
-                        setattr(b, 'multi_head_classification', True)
-                        setattr(b, 'rgbd_wise_multi_head', True)
-                        setattr(b, 'rgbd_version', 'v2')
-                        setattr(b, 'tf_layers', tf_layers)
-                        setattr(b, 'with_rednet_pretrained', True)
-                        setattr(b, 'overwrite_imagenet', True)
-                        exps.append(copy.deepcopy(b))
-                        setattr(b, 'depth_fusion', 'Squeeze&Excite-Bi-Directional')
-                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'),
-                                                          'dfuse_{}_multihead-RGBDwise-v3-rednet'.format(fusion)))
-                        setattr(b, 'multi_head_classification', True)
-                        setattr(b, 'rgbd_wise_multi_head', True)
-                        setattr(b, 'rgbd_version', 'v3')
-                        setattr(b, 'tf_layers', tf_layers)
-                        setattr(b, 'with_rednet_pretrained', True)
-                        setattr(b, 'overwrite_imagenet', True)
-                        exps.append(copy.deepcopy(b))
-                        setattr(b, 'depth_fusion', fusion)
-                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'),
-                                                          'dfuse_{}_multihead-RGBDwise-rednet-mix'.format(fusion)))
-                        setattr(b, 'multi_head_classification', True)
-                        setattr(b, 'rgbd_wise_multi_head', True)
-                        setattr(b, 'rgbd_version', 'v1')
-                        setattr(b, 'tf_layers', tf_layers)
-                        setattr(b, 'with_rednet_pretrained', True)
-                        setattr(b, 'overwrite_imagenet', False)
-                        exps.append(copy.deepcopy(b))
-                        setattr(b, 'depth_fusion', fusion)
-                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'),
-                                                          'dfuse_{}_multihead-RGBDwise-v2-rednet-mix'.format(fusion)))
-                        setattr(b, 'multi_head_classification', True)
-                        setattr(b, 'rgbd_wise_multi_head', True)
-                        setattr(b, 'rgbd_version', 'v2')
-                        setattr(b, 'tf_layers', tf_layers)
-                        setattr(b, 'with_rednet_pretrained', True)
-                        setattr(b, 'overwrite_imagenet', False)
-                        exps.append(copy.deepcopy(b))
-                        setattr(b, 'depth_fusion', 'Squeeze&Excite-Bi-Directional')
-                        setattr(b, 'name', '{}_{}'.format(getattr(a, 'name'),
-                                                          'dfuse_{}_multihead-RGBDwise-v3-rednet-mix'.format(fusion)))
-                        setattr(b, 'multi_head_classification', True)
-                        setattr(b, 'rgbd_wise_multi_head', True)
-                        setattr(b, 'rgbd_version', 'v3')
-                        setattr(b, 'tf_layers', tf_layers)
-                        setattr(b, 'with_rednet_pretrained', True)
-                        setattr(b, 'overwrite_imagenet', False)
-                        exps.append(copy.deepcopy(b))
-                        '''
 
                 if add_roi_crop_exp:
                     b = copy.deepcopy(a)

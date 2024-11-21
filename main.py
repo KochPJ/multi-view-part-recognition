@@ -22,7 +22,7 @@ def get_args_parser():
     parser.add_argument('--outdir', default='./results', type=str)
     parser.add_argument('--epochs', default=100, type=int) #100
     parser.add_argument('--start_epoch', default=0, type=int)
-    parser.add_argument('--batch_size', default=48, type=int) #32
+    parser.add_argument('--batch_size', default=32, type=int) #32
     parser.add_argument('--num_workers', default=34, type=int) #34
     parser.add_argument('--device', default='cuda:0', type=str)
     parser.add_argument('--multi_gpu', default=True, type=bool)
@@ -41,7 +41,7 @@ def get_args_parser():
     parser.add_argument('--topk', default='1-3-5', type=str)
 
     # dataset
-    parser.add_argument('--path', default='MVIP/sets', type=str)
+    parser.add_argument('--path', default='./MVIP/sets', type=str)
     parser.add_argument('--roicrop', default=True, type=bool)
     parser.add_argument('--shuf_views', default=False, type=bool)
     parser.add_argument('--shuf_views_cw', default=True, type=bool)
@@ -50,6 +50,7 @@ def get_args_parser():
     parser.add_argument('--shuf_views_vw', default=True, type=bool)
     parser.add_argument('--p_shuf_cw', default=1.0, type=float)
     parser.add_argument('--p_shuf_vw', default=1.0, type=float)
+    parser.add_argument('--view_noise', default=0.0, type=float)
     parser.add_argument('--data_views', default='1-6-9', type=str) #1-6-9 #1-2-3-4-5-6-7-8-9-10
     parser.add_argument('--views', default='1-6-9', type=str) #1-6-9
     parser.add_argument('--random_view_order', default=False, type=bool)
@@ -67,8 +68,8 @@ def get_args_parser():
     parser.add_argument('--depth2hha', default=False, type=bool)
     parser.add_argument('--rotation_aug', default=True, type=bool)
     parser.add_argument('--flip_aug', default=True, type=bool)
-    parser.add_argument('--width', default=512, type=int)
-    parser.add_argument('--height', default=512, type=int)
+    parser.add_argument('--width', default=224, type=int)
+    parser.add_argument('--height', default=224, type=int)
     parser.add_argument('--multi_scale_training', default=False, type=bool)
     parser.add_argument('--training_scale_low', default=0.1, type=float)
     parser.add_argument('--training_scale_high', default=0.1, type=float)
@@ -82,8 +83,8 @@ def get_args_parser():
     parser.add_argument('--rgbd_version', default='v2', type=str)
     parser.add_argument('--fusion', default='Conv', type=str) #['Squeeze&Excite', 'SharedSqueeze&Excite', 'FC', 'Conv']
     parser.add_argument('--pretrained', default=True, type=bool)
-    parser.add_argument('--with_rednet_pretrained', default=True, type=bool)
-    parser.add_argument('--rednet_pretrained_path', default='./weights/rednet/rednet_ckpt.pth', type=str)
+    parser.add_argument('--with_rednet_pretrained', default=False, type=bool)
+    parser.add_argument('--rednet_pretrained_path', default='/home/kochpaul/Downloads/rednet_ckpt.pth', type=str)
     parser.add_argument('--overwrite_imagenet', default=True, type=bool)
     parser.add_argument('--encoder_path', default='', type=str)
     parser.add_argument('--depth_fusion', default='Squeeze&Excite', type=str) #['Squeeze&Excite',  'Conv']
@@ -98,6 +99,7 @@ def get_args_parser():
     parser.add_argument('--pc_scale', default=200*math.pi, type=float)
     parser.add_argument('--pc_temp', default=2000, type=float)
     parser.add_argument('--use_weightNet', default=False, type=bool)
+    parser.add_argument('--use_propertyNet', default=False, type=bool)
     parser.add_argument('--freeze_weightnet', default=False, type=bool)
 
     # scheduler
@@ -351,6 +353,24 @@ def main(args):
         for step, (x, y) in enumerate(dataloader['train']):
             #if step == 4:
             #    break
+
+            if args.view_noise > 0:
+                #print(torch.mean(x['x']), x['x'].shape)
+                noise = torch.rand(x['x'].shape)
+                inds = torch.rand(len(noise)) < args.view_noise
+                #print(inds, args.view_noise)
+                x['x'][inds] = noise[inds]
+
+                #print(torch.mean(x['x']), x['x'].shape)
+                if 'depth' in x:
+                    noise = torch.rand(x['depth'].shape)
+                    inds = torch.rand(len(noise)) < args.view_noise
+                    x['depth'][inds] = noise[inds]
+
+            if 'size' in x:
+                x['weight'] = torch.cat([x['weight'], x['size'].squeeze(1)], dim=1)
+                del x['size']
+
             for key in x:
                 x[key] = x[key].to(device)
 
@@ -425,6 +445,10 @@ def main(args):
         for step, (x, y) in enumerate(dataloader['valid']):
             #if step == 4:
             #    break
+            if 'size' in x:
+                x['weight'] = torch.cat([x['weight'], x['size'].squeeze(1)], dim=1)
+                del x['size']
+
             for key in x:
                 x[key] = x[key].to(device)
 
@@ -537,8 +561,13 @@ def main(args):
     losses = []
     t_step = time.time()
     for step, (x, y) in enumerate(dataloader['test']):
-        #if step == 4:
+        #if step == 4:f
         #    break
+
+        if 'size' in x:
+            x['weight'] = torch.cat([x['weight'], x['size'].squeeze(1)], dim=1)
+            del x['size']
+
         for key in x:
             x[key] = x[key].to(device)
 

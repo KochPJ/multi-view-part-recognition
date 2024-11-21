@@ -1,5 +1,4 @@
 import copy
-import math
 
 import torch
 import numpy as np
@@ -14,6 +13,7 @@ from utils.metric import TopKAccuracy
 from utils.stuff import bar_progress, lookup, load_fitting_state_dict
 import time
 import random
+import math
 
 
 def get_args_parser():
@@ -56,7 +56,7 @@ def get_args_parser():
     parser.add_argument('--views', default='1-6-9', type=str) #1-6-9
     parser.add_argument('--random_view_order', default=False, type=bool)
     parser.add_argument('--rotations', default='0-1-2-3-4-5-6-7-8-9-10-11', type=str)
-    parser.add_argument('--input_keys', default='weight', type=str)
+    parser.add_argument('--input_keys', default='size-weight', type=str)
     parser.add_argument('--load_keys', default='size-weight-meta', type=str)
     parser.add_argument('--num_classes', default=-1, type=int)
     parser.add_argument('--visualize_samples', default=False, type=bool)
@@ -126,21 +126,30 @@ def main(args):
         cp = torch.load(current_dir)
         print('loaded current checkpoint from {}'.format(current_dir))
     else:
+        print(current_dir, 'does not exist')
         cp = None
+
 
     ds = get_dataset(args)
 
     weights = []
     zeros = []
     classes = []
+    sizes = []
     for cls, meta in ds['meta'].items():
         if meta['weight'] == 0:
             zeros.append(cls)
         #else:
         weights.append(meta['weight'])
         classes.append(cls)
+        sizes.append(sorted(meta['size']))
+
+
 
     weights = np.array(weights)
+    sizes = np.array(sizes) / 1000
+
+    print(weights[0], sizes[0])
 
     nearest = []
     same = {}
@@ -152,14 +161,34 @@ def main(args):
     top1p = [0 for _ in range(len(eps))]
     top3p = [0 for _ in range(len(eps))]
     top5p = [0 for _ in range(len(eps))]
+
+    top1_s = [0 for _ in range(len(eps))]
+    top3_s = [0 for _ in range(len(eps))]
+    top5_s = [0 for _ in range(len(eps))]
+    top1p_s = [0 for _ in range(len(eps))]
+    top3p_s = [0 for _ in range(len(eps))]
+    top5p_s = [0 for _ in range(len(eps))]
+
+    top1_sw = [0 for _ in range(len(eps))]
+    top3_sw = [0 for _ in range(len(eps))]
+    top5_sw = [0 for _ in range(len(eps))]
+    top1p_sw = [0 for _ in range(len(eps))]
+    top3p_sw = [0 for _ in range(len(eps))]
+    top5p_sw = [0 for _ in range(len(eps))]
     #eps_p = np.arange(0, 101) / 1000
 
-    for i, (w, cls) in enumerate(zip(weights, classes)):
+    for i, (w, cls, size) in enumerate(zip(weights, classes, sizes)):
         new = copy.deepcopy(weights)
+        new_s = copy.deepcopy(sizes)
         new[i] = -1000
         sub = np.abs(new - w)
+        sub_s = np.abs(new_s - size)
+        sub_s = np.sum(sub_s, axis=1)
+
         for ij, e in enumerate(eps):
             n = np.sum(sub <= e)
+            n_s = np.sum(sub_s < e)
+
             if n == 0:
                 top1[ij] += 1
             if n < 3:
@@ -174,6 +203,51 @@ def main(args):
                 top3p[ij] += 1
             if n < 5:
                 top5p[ij] += 1
+
+            # ns
+            if n_s == 0:
+                top1_s[ij] += 1
+            if n_s < 3:
+                top3_s[ij] += 1
+            if n_s < 5:
+                top5_s[ij] += 1
+
+            n_s = np.sum(sub_s <= e * w)
+            if n_s == 0:
+                top1p_s[ij] += 1
+            if n_s < 3:
+                top3p_s[ij] += 1
+            if n_s < 5:
+                top5p_s[ij] += 1
+
+            stack = np.stack([sub <= e, sub_s < e]).all(axis=0)
+            print(np.sum(stack > 0))
+            #print(stack.shape)
+            #input()
+
+            n_s = np.sum(stack > 0)
+            # both
+            if n_s == 0:
+                top1_sw[ij] += 1
+            if n_s < 3:
+                top3_sw[ij] += 1
+            if n_s < 5:
+                top5_sw[ij] += 1
+
+
+            stack = np.stack([sub <= e*w, sub_s < e*w]).all(axis=0)
+            #print(np.sum(stack > 0))
+            #print(stack.shape)
+            #input()
+
+            n_s = np.sum(stack > 0)
+
+            if n_s == 0:
+                top1p_sw[ij] += 1
+            if n_s < 3:
+                top3p_sw[ij] += 1
+            if n_s < 5:
+                top5p_sw[ij] += 1
 
         mini = np.min(sub)
         if mini == 0:
@@ -198,27 +272,75 @@ def main(args):
     top1p = (np.array(top1p) / len(weights)) * 100
     top3p = (np.array(top3p) / len(weights)) * 100
     top5p = (np.array(top5p) / len(weights)) * 100
-    print(len(top1), len(top3), len(top5))
-    print(top5)
+    top1_s = (np.array(top1_s) / len(weights)) * 100
+    top3_s = (np.array(top3_s) / len(weights)) * 100
+    top5_s = (np.array(top5_s) / len(weights)) * 100
+    top1p_s = (np.array(top1p_s) / len(weights)) * 100
+    top3p_s = (np.array(top3p_s) / len(weights)) * 100
+    top5p_s = (np.array(top5p_s) / len(weights)) * 100
+    top1_sw = (np.array(top1_sw) / len(weights)) * 100
+    top3_sw = (np.array(top3_sw) / len(weights)) * 100
+    top5_sw = (np.array(top5_sw) / len(weights)) * 100
+    top1p_sw = (np.array(top1p_sw) / len(weights)) * 100
+    top3p_sw = (np.array(top3p_sw) / len(weights)) * 100
+    top5p_sw = (np.array(top5p_sw) / len(weights)) * 100
 
     plt.style.use('seaborn-v0_8-whitegrid')
-    plt.subplot(1,2,1)
+    plt.subplot(3,2,1)
 
     plt.plot(eps, top1)
     plt.plot(eps, top3)
     plt.plot(eps, top5)
     plt.legend(['Top1', 'Top3', 'Top5'])
-    plt.xlabel('Epsilon')
+    #plt.xlabel('Epsilon')
     plt.title('Constant')
-    plt.ylabel('Acc [%]')
-    plt.subplot(1, 2, 2)
+    plt.ylabel('Acc [%] Weight Only')
+    plt.subplot(3, 2, 2)
     plt.plot(eps, top1p)
     plt.plot(eps, top3p)
     plt.plot(eps, top5p)
     plt.title('Proportional')
     #plt.legend(['Top1', 'Top3', 'Top5'])
-    plt.xlabel('Epsilon')
+    #plt.xlabel('Epsilon')
     #plt.ylabel('Acc [%]')
+    plt.subplot(3, 2, 3)
+
+    plt.plot(eps, top1_s)
+    plt.plot(eps, top3_s)
+    plt.plot(eps, top5_s)
+    plt.legend(['Top1', 'Top3', 'Top5'])
+    #plt.xlabel('Epsilon')
+    #plt.title('Constant')
+    plt.ylabel('Acc [%] Size Only')
+    plt.subplot(3, 2, 4)
+    plt.plot(eps, top1p_s)
+    plt.plot(eps, top3p_s)
+    plt.plot(eps, top5p_s)
+    #plt.title('Proportional')
+    # plt.legend(['Top1', 'Top3', 'Top5'])
+    #plt.xlabel('Epsilon')
+    # plt.ylabel('Acc [%]')
+
+    plt.subplot(3, 2, 5)
+
+    plt.plot(eps, top1_sw)
+    plt.plot(eps, top3_sw)
+    plt.plot(eps, top5_sw)
+    plt.legend(['Top1', 'Top3', 'Top5'])
+    plt.xlabel('Epsilon')
+    #plt.title('Constant')
+    plt.ylabel('Acc [%] Weight & Size')
+    plt.subplot(3, 2, 6)
+    plt.plot(eps, top1p_sw)
+    plt.plot(eps, top3p_sw)
+    plt.plot(eps, top5p_sw)
+    #plt.title('Proportional')
+    # plt.legend(['Top1', 'Top3', 'Top5'])
+    plt.xlabel('Epsilon')
+    # plt.ylabel('Acc [%]')
+
+
+
     plt.show()
     '''
     bins = np.arange(0, int(np.max(weights) + 2)*2) / 2
@@ -334,6 +456,8 @@ def main(args):
     for mode in modes:
         print('------ {} ------'.format(mode))
         print('     classes: {}'.format(len(ds[mode])))
+        print('     input: {}'.format(datasets[mode].input_keys))
+        print('     load: {}'.format(datasets[mode].load_keys))
         print('     samples: {}'.format(sum([len(ds[mode][cls]) for cls in ds[mode]])))
         print('     dataset len: {}'.format(len(datasets[mode])))
         print('     dataloader len: {}'.format(len(dataloader[mode])))
@@ -356,6 +480,7 @@ def main(args):
     # set device, build model, push model to device and load a checkpoint if given
     device = torch.device(args.device)
     model = get_model(args)
+    #print(model)
     if cp is not None:
         print('loading current model state dict from {}'.format(current_dir))
         model = load_fitting_state_dict(model, cp['state_dict'])
@@ -416,8 +541,15 @@ def main(args):
     metrics = {k: TopKAccuracy(int(k)) for k in args.topk.split('-')}
 
     if cp is not None:
-        optimizer.load_state_dict(cp['optimizer'])
-        scheduler.load_state_dict(cp['scheduler'])
+        try:
+            optimizer.load_state_dict(cp['optimizer'])
+        except Exception:
+            print(e)
+        try:
+            scheduler.load_state_dict(cp['scheduler'])
+        except Exception:
+            print(e)
+
         logs = cp['logs']
         args.start_epoch = logs['epoch'] + 1
     else:
@@ -439,6 +571,9 @@ def main(args):
 
     bestk = sorted(list(args.topk.split('-')))[0]
     del cp
+
+    print('input keys', args.input_keys)
+    print('load keys', args.load_keys)
 
     times = {
         'epoch': [],
@@ -479,6 +614,10 @@ def main(args):
         model.train()
         t_step = time.time()
         for step, (x, y) in enumerate(dataloader['train']):
+            if 'size' in x:
+                x['size'] = x['size'].squeeze(1)
+                x = {'property': torch.cat([x['weight'], x['size']], dim=1)}
+
             #if step == 4:
             #    break
             for key in x:
@@ -554,6 +693,9 @@ def main(args):
         model.eval()
         losses = []
         for step, (x, y) in enumerate(dataloader['valid']):
+            if 'size' in x:
+                x['size'] = x['size'].squeeze(1)
+                x = {'property': torch.cat([x['weight'], x['size']], dim=1)}
             #if step == 4:
             #    break
             for key in x:
@@ -648,6 +790,8 @@ def main(args):
         model = model.module
     model = model.to('cpu')
     #model.load_state_dict(sd)
+    #print(model.state_dict().keys(), sd.keys())
+
     model = load_fitting_state_dict(model, sd)
 
     if args.multi_gpu and torch.cuda.device_count() > 1 and args.device != 'cpu':
@@ -659,6 +803,10 @@ def main(args):
     losses = []
     t_step = time.time()
     for step, (x, y) in enumerate(dataloader['test']):
+        if 'size' in x:
+            x['size'] = x['size'].squeeze(1)
+            x = {'property': torch.cat([x['weight'], x['size']], dim=1)}
+
         #if step == 4:
         #    break
         for key in x:

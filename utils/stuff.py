@@ -279,6 +279,7 @@ def load_fitting_state_dict(arch, state_dict):
         except Exception as e:
             #print(e)
             wrong_shape += 1
+            print('shape', key, v.shape)
             continue
         okay += 1
     msg = 'Loaded {}/{} weights, wrong key: {}, wrong shape: {}, missing: {}'.format(

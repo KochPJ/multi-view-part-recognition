@@ -1,3 +1,5 @@
+import copy
+
 from utils.preprocesses import RoiCrop, Resize
 import os
 from PIL import Image
@@ -11,22 +13,31 @@ if __name__ == '__main__':
     m = 512
     kh = 10
     kw = 50
+    ignore_exisisting = True
+    with_sub_folder = True
 
     dpi = 600
     resize = Resize(height=m, width=m)
-    root = '/mnt/HDD/industrial_part_recognition'
-    classes = [d for d in os.listdir(root) if os.path.isdir(os.path.join(root, d))]
+    root = '/mnt/share/more_datasets/Denso_MV/sets'
+    classes = sorted([d for d in os.listdir(root) if os.path.isdir(os.path.join(root, d))] )
     print(classes)
 
+    ignore = ['cam_08', 'cam_03']
 
+    start = 0
     for count, cls in enumerate(classes):
-        path = '/mnt/share/more_datasets/MVIP/sets/{}/train_data/0/0/'.format(cls)
-        out = '/home/kochpaul/images3'
+        if count < start:
+            continue
+
+        out = '/home/kochpaul/DensoThumb'
         print('{}/{} | {}'.format(count+1, len(classes), cls))
 
         ns = [10]
+        path = '/mnt/share/more_datasets/Denso_MV/sets/{}/train_data/0/0/'.format(cls)
+
         views_ = sorted(list(os.listdir(path)))
-        #random.shuffle(views_)
+        views_ = [v for v in views_ if v not in ignore]
+        random.shuffle(views_)
         print(views_)
 
         '''
@@ -77,8 +88,8 @@ if __name__ == '__main__':
 
         #xx = [1, 2]
         #yy = [10, 2]
-        xx = [1]
-        yy = [10]
+        xx = [2]
+        yy = [2]
 
         for x, y in zip(xx, yy):
 
@@ -118,12 +129,24 @@ if __name__ == '__main__':
             #plt.show()
 
             k = 0
-            op = os.path.join(out, '{}_{}.png'.format(cls, k))
-            while os.path.exists(op):
-                k += 1
+            if with_sub_folder:
+                if not os.path.exists(os.path.join(out, cls)):
+                    os.makedirs(os.path.join(out, cls))
+                op = os.path.join(out, cls, '{}.png'.format(cls))
+            else:
                 op = os.path.join(out, '{}_{}.png'.format(cls, k))
 
-            plt.savefig(op, bbox_inches='tight', pad_inches=0, dpi=dpi)
+            if not ignore_exisisting or not os.path.exists(op):
+
+                while os.path.exists(op):
+                    k += 1
+                    op = os.path.join(out, '{}_{}.png'.format(cls, k))
+                plt.savefig(op, bbox_inches='tight', pad_inches=0, dpi=dpi)
+
+            el
+                continue
+            del img
+            plt.cla()
 
 
 
