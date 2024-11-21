@@ -19,11 +19,11 @@ def get_args_parser():
 
     # training
     # parser.add_argument('--name', default='ResNet_34_nr3_1_6_9-res512-ms', type=str)
-    parser.add_argument('--name', default='resnet50-logiccube_0-2_256x256.pth', type=str)
+    parser.add_argument('--name', default='resnet50-logiccube_0-2_400x400.pth', type=str)
     parser.add_argument('--outdir', default='./results', type=str)
-    parser.add_argument('--epochs', default=100, type=int) #100
+    parser.add_argument('--epochs', default=120, type=int) #100
     parser.add_argument('--start_epoch', default=0, type=int)
-    parser.add_argument('--batch_size', default=52, type=int) #32
+    parser.add_argument('--batch_size', default=112, type=int) #32
     parser.add_argument('--num_workers', default=34, type=int) #34
     parser.add_argument('--device', default='cuda:0', type=str)
     parser.add_argument('--multi_gpu', default=True, type=bool)

@@ -22,7 +22,7 @@ def get_args_parser():
     parser.add_argument('--outdir', default='./results', type=str)
     parser.add_argument('--epochs', default=100, type=int) #100
     parser.add_argument('--start_epoch', default=0, type=int)
-    parser.add_argument('--batch_size', default=32, type=int) #32
+    parser.add_argument('--batch_size', default=48, type=int) #32
     parser.add_argument('--num_workers', default=34, type=int) #34
     parser.add_argument('--device', default='cuda:0', type=str)
     parser.add_argument('--multi_gpu', default=True, type=bool)
@@ -41,7 +41,7 @@ def get_args_parser():
     parser.add_argument('--topk', default='1-3-5', type=str)
 
     # dataset
-    parser.add_argument('--path', default='./MVIP/sets', type=str)
+    parser.add_argument('--path', default='MVIP/sets', type=str)
     parser.add_argument('--roicrop', default=True, type=bool)
     parser.add_argument('--shuf_views', default=False, type=bool)
     parser.add_argument('--shuf_views_cw', default=True, type=bool)
@@ -67,8 +67,8 @@ def get_args_parser():
     parser.add_argument('--depth2hha', default=False, type=bool)
     parser.add_argument('--rotation_aug', default=True, type=bool)
     parser.add_argument('--flip_aug', default=True, type=bool)
-    parser.add_argument('--width', default=224, type=int)
-    parser.add_argument('--height', default=224, type=int)
+    parser.add_argument('--width', default=512, type=int)
+    parser.add_argument('--height', default=512, type=int)
     parser.add_argument('--multi_scale_training', default=False, type=bool)
     parser.add_argument('--training_scale_low', default=0.1, type=float)
     parser.add_argument('--training_scale_high', default=0.1, type=float)
@@ -82,8 +82,8 @@ def get_args_parser():
     parser.add_argument('--rgbd_version', default='v2', type=str)
     parser.add_argument('--fusion', default='Conv', type=str) #['Squeeze&Excite', 'SharedSqueeze&Excite', 'FC', 'Conv']
     parser.add_argument('--pretrained', default=True, type=bool)
-    parser.add_argument('--with_rednet_pretrained', default=False, type=bool)
-    parser.add_argument('--rednet_pretrained_path', default='/home/kochpaul/Downloads/rednet_ckpt.pth', type=str)
+    parser.add_argument('--with_rednet_pretrained', default=True, type=bool)
+    parser.add_argument('--rednet_pretrained_path', default='./weights/rednet/rednet_ckpt.pth', type=str)
     parser.add_argument('--overwrite_imagenet', default=True, type=bool)
     parser.add_argument('--encoder_path', default='', type=str)
     parser.add_argument('--depth_fusion', default='Squeeze&Excite', type=str) #['Squeeze&Excite',  'Conv']

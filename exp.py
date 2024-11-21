@@ -47,7 +47,7 @@ if __name__ == '__main__':
     add_fusion_exp = False # True
     add_encoder_decoder_tf = False
     add_PE_exp = False
-    add_weight_exp = False # True
+    add_weight_exp = True # True
     add_roi_crop_exp = False
     add_view_exp = False #10
     add_view_exp_long = False # gleich
@@ -59,7 +59,7 @@ if __name__ == '__main__':
     add_rotation_exps = False # True 12exps
     add_dataviews_exps = False # True 8exps
     add_random_view_order_exp = False #True
-    add_resize_exp = True
+    add_resize_exp = False
     add_lr_exp = False
     add_models_exp = False
     add_max_pool_exp = False #gleich
@@ -90,8 +90,8 @@ if __name__ == '__main__':
     long_multiplier = 5.0
     num_epoch_multiplier = 0.5
     tf_layers = 1
-    runs = 25
-    run_start = 24 #3
+    runs = 30
+    run_start = 29 #3
     start_exp = 0 #3
     for run in range(run_start, runs):
         outdir_ = os.path.join(outdir, 'run{}'.format(str(run).zfill(3)))

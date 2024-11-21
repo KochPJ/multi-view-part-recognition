@@ -24,7 +24,7 @@ def get_args_parser():
 
     # No 25
     parser.add_argument('--outdir', default='./results/run027', type=str)
-    parser.add_argument('--name', default='ResNet_50_nr2-d_4-7', type=str)
+    parser.add_argument('--name', default='ResNet_50_nr3-b_0-4-7', type=str)
 
     # No 26
     # parser.add_argument('--outdir', default='./results/run026', type=str)

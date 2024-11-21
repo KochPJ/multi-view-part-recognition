@@ -1,4 +1,5 @@
 import copy
+import math
 
 import torch
 import numpy as np
@@ -19,9 +20,9 @@ def get_args_parser():
     parser = argparse.ArgumentParser('Set MultiView', add_help=False)
 
     # training
-    parser.add_argument('--name', default='WeightNet100-6', type=str)
+    parser.add_argument('--name', default='PropertyNet_with_random', type=str)
     parser.add_argument('--outdir', default='./results/run100', type=str)
-    parser.add_argument('--epochs', default=100, type=int) #100
+    parser.add_argument('--epochs', default=10000, type=int) #100
     parser.add_argument('--start_epoch', default=0, type=int)
     parser.add_argument('--batch_size', default=512, type=int) #32
     parser.add_argument('--num_workers', default=2, type=int) #34
@@ -34,7 +35,7 @@ def get_args_parser():
 
     # loss
     parser.add_argument('--lr_group_wise', default=False, type=bool)
-    parser.add_argument('--lr', default=1e-6, type=float)
+    parser.add_argument('--lr', default=1e-5, type=float)
     parser.add_argument('--lr_encoder', default=1e-4, type=float)
     parser.add_argument('--lr_fusion', default=1e-4, type=float)
 
@@ -56,7 +57,7 @@ def get_args_parser():
     parser.add_argument('--random_view_order', default=False, type=bool)
     parser.add_argument('--rotations', default='0-1-2-3-4-5-6-7-8-9-10-11', type=str)
     parser.add_argument('--input_keys', default='weight', type=str)
-    parser.add_argument('--load_keys', default='weight', type=str)
+    parser.add_argument('--load_keys', default='size-weight-meta', type=str)
     parser.add_argument('--num_classes', default=-1, type=int)
     parser.add_argument('--visualize_samples', default=False, type=bool)
     parser.add_argument('--show_axis', default=True, type=bool)
@@ -96,6 +97,10 @@ def get_args_parser():
     parser.add_argument('--with_positional_encoding', default=True, type=bool)
     parser.add_argument('--learnable_pe', default=True, type=bool)
     parser.add_argument('--pc_embed_channels', default=64, type=int)
+    parser.add_argument('--pc_scale', default=200*math.pi, type=float)
+    parser.add_argument('--pc_temp', default=2000, type=float)
+    parser.add_argument('--use_weightNet', default=False, type=bool)
+    parser.add_argument('--freeze_weightnet', default=False, type=bool)
 
     # scheduler
     parser.add_argument('--one_cycle', default=True, type=bool)
